@@ -46,6 +46,8 @@ pub fn run() {
             commands::get_stats,
             commands::delete_album,
             commands::clear_all_cache,
+            commands::get_scoring_weights,
+            commands::set_scoring_weights,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

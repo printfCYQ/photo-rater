@@ -1,5 +1,6 @@
 import type { AccentPreset, FontSize } from "../contexts/SettingsContext";
 import { useSettings } from "../contexts/SettingsContext";
+import type { ScoringWeights } from "../api";
 
 // ---------------------------------------------------------------------------
 // Data
@@ -19,6 +20,50 @@ const COLOR_PRESETS: { key: AccentPreset; label: string; hex: string }[] = [
   { key: "emerald", label: "翠绿", hex: "#10b981" },
 ];
 
+const DEFAULT_WEIGHTS: ScoringWeights = {
+  sharpness: 0.28,
+  color: 0.30,
+  composition: 0.27,
+  exposure: 0.15,
+  noise_penalty: 0.35,
+};
+
+interface WeightSliderProps {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  color: string;
+  description: string;
+  /** Display percentage shown on the right. Defaults to raw value × 100. */
+  displayPct?: number;
+}
+
+function WeightSlider({ label, value, onChange, color, description, displayPct }: WeightSliderProps) {
+  const pct = displayPct != null ? displayPct : Math.round(value * 100);
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}80` }} />
+          <span className="text-[13px] font-medium text-base-100">{label}</span>
+        </div>
+        <span className="text-[12px] font-bold tabular-nums text-base-300">{pct}%</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full weight-slider"
+        style={{ accentColor: color }}
+      />
+      <p className="text-[11px] text-base-500 leading-relaxed">{description}</p>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -28,24 +73,35 @@ interface SettingsProps {
 }
 
 export function Settings({ open, onClose }: SettingsProps) {
-  const { settings, setFontSize, setAccentColor } = useSettings();
+  const { settings, setFontSize, setAccentColor, setScoringWeights } = useSettings();
+  const w = settings.scoringWeights;
 
   if (!open) return null;
+
+  const updateWeight = (key: keyof ScoringWeights, val: number) => {
+    setScoringWeights({ ...w, [key]: val });
+  };
+
+  const resetWeights = () => setScoringWeights({ ...DEFAULT_WEIGHTS });
+
+  // Compute normalized percentages for display
+  const sum = w.sharpness + w.color + w.composition + w.exposure;
+  const norm = (v: number) => sum > 0 ? Math.round((v / sum) * 100) : 0;
 
   return (
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm animate-fade-in"
+        className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
       />
 
       {/* Panel */}
-      <div className="fixed top-1/2 left-1/2 z-[210] -translate-x-1/2 -translate-y-1/2
-        w-[380px] max-w-[92vw] animate-scale-in">
+      <div className="fixed inset-0 z-[210] flex items-center justify-center pointer-events-none">
+        <div className="relative w-[420px] max-w-[92vw] max-h-[85vh] overflow-y-auto custom-scrollbar animate-scale-in pointer-events-auto">
         <div className="bg-surface border border-base-700/60 rounded-2xl shadow-overlay overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-base-800/40">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-base-800/40 sticky top-0 bg-surface z-10">
             <h2 className="text-[15px] font-semibold text-base-100">设置</h2>
             <button
               onClick={onClose}
@@ -115,7 +171,69 @@ export function Settings({ open, onClose }: SettingsProps) {
                 ))}
               </div>
             </section>
+
+            {/* ---- Scoring Weights ---- */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[1.5px] text-base-500">
+                  评分权重
+                </h3>
+                <button
+                  onClick={resetWeights}
+                  className="text-[11px] text-base-500 hover:text-accent-light transition-colors"
+                >
+                  恢复默认
+                </button>
+              </div>
+
+              <div className="space-y-4 p-3.5 rounded-lg bg-surface-alt border border-base-700/40">
+                <WeightSlider
+                  label="清晰度"
+                  value={w.sharpness}
+                  onChange={(v) => updateWeight("sharpness", v)}
+                  color="var(--accent)"
+                  description="Laplacian + FFT 频域分析"
+                  displayPct={norm(w.sharpness)}
+                />
+                <WeightSlider
+                  label="色彩和谐"
+                  value={w.color}
+                  onChange={(v) => updateWeight("color", v)}
+                  color="#10b981"
+                  description="饱和度 + 色相多样性"
+                  displayPct={norm(w.color)}
+                />
+                <WeightSlider
+                  label="构图"
+                  value={w.composition}
+                  onChange={(v) => updateWeight("composition", v)}
+                  color="#a855f7"
+                  description="三分法对齐检测"
+                  displayPct={norm(w.composition)}
+                />
+                <WeightSlider
+                  label="曝光"
+                  value={w.exposure}
+                  onChange={(v) => updateWeight("exposure", v)}
+                  color="#f59e0b"
+                  description="亮度偏离检测"
+                  displayPct={norm(w.exposure)}
+                />
+                <WeightSlider
+                  label="噪点惩罚"
+                  value={w.noise_penalty}
+                  onChange={(v) => updateWeight("noise_penalty", v)}
+                  color="#ef4444"
+                  description="高噪点总分扣减倍率，0 = 不惩罚，1 = 最大惩罚"
+                />
+              </div>
+
+              <p className="text-[11px] text-base-500 mt-2 leading-relaxed">
+                四项主权重自动归一化，右侧显示实际占比。修改后需重新「批量评分」生效。
+              </p>
+            </section>
           </div>
+        </div>
         </div>
       </div>
     </>

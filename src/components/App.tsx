@@ -35,6 +35,7 @@ export function App() {
   const [sortBy, setSortBy] = useState("composite_score");
   const [sortDesc, setSortDesc] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [minScore, setMinScore] = useState<number | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   // Delete confirmation state
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -42,6 +43,7 @@ export function App() {
     albumName: string;
   } | null>(null);
   const [deleteClearCache, setDeleteClearCache] = useState(false);
+  const [clearCacheConfirm, setClearCacheConfirm] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -59,7 +61,7 @@ export function App() {
       setPhotos([]);
       setStats(null);
     }
-  }, [selectedAlbumId, sortBy, sortDesc, statusFilter]);
+  }, [selectedAlbumId, sortBy, sortDesc, statusFilter, minScore]);
 
   // Listen for batch score progress
   useEffect(() => {
@@ -89,6 +91,7 @@ export function App() {
       const result = await listPhotos({
         album_id: selectedAlbumId,
         status: statusFilter,
+        min_score: minScore,
         sort_by: sortBy,
         sort_desc: sortDesc,
       });
@@ -196,6 +199,7 @@ export function App() {
   };
 
   const handleClearAllCache = async () => {
+    setClearCacheConfirm(false);
     try {
       const removed = await clearAllCache();
       thumbUrlCache.clear();
@@ -256,7 +260,7 @@ export function App() {
         onSelectAlbum={setSelectedAlbumId}
         onScanDirectory={handleScanDirectory}
         onDeleteAlbum={handleDeleteAlbum}
-        onClearCache={handleClearAllCache}
+        onClearCache={() => setClearCacheConfirm(true)}
         stats={stats}
         collapsed={sidebarCollapsed}
       />
@@ -270,6 +274,8 @@ export function App() {
           }}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
+          minScore={minScore}
+          onMinScoreChange={setMinScore}
           onBatchScore={handleBatchScore}
           onExport={handleSelectExportFolder}
           scoring={scoring}
@@ -286,6 +292,7 @@ export function App() {
           onPhotoClick={(index) => setLightboxIndex(index)}
           thumbSize={400}
           sidebarWidth={sidebarCollapsed ? 0 : 260}
+          keyboardEnabled={lightboxIndex === null}
         />
         <StatusBar stats={stats} photoCount={photos.length} loading={loading} />
       </div>
@@ -336,6 +343,18 @@ export function App() {
         }
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteConfirm(null)}
+      />
+
+      {/* Clear cache confirmation */}
+      <ConfirmDialog
+        open={clearCacheConfirm}
+        title="清除所有缓存"
+        message="将删除所有相册的缩略图磁盘缓存，下次浏览时需重新生成。此操作不影响照片文件和评分数据。"
+        confirmLabel="清除"
+        cancelLabel="取消"
+        variant="danger"
+        onConfirm={handleClearAllCache}
+        onCancel={() => setClearCacheConfirm(false)}
       />
 
       {/* Settings panel */}

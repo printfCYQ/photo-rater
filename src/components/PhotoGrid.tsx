@@ -1,5 +1,5 @@
-import React, { memo, useEffect, useState, useCallback, useMemo, forwardRef } from "react";
-import { VirtuosoGrid } from "react-virtuoso";
+import React, { memo, useEffect, useState, useCallback, useMemo, forwardRef, useRef } from "react";
+import { VirtuosoGrid, type VirtuosoGridHandle } from "react-virtuoso";
 import type { Photo } from "../types";
 import { batchGetThumbnailUrls } from "../api";
 
@@ -11,6 +11,8 @@ interface PhotoGridProps {
   thumbSize: number;
   /** Current sidebar width in px, 0 if collapsed. Defaults to 260. */
   sidebarWidth?: number;
+  /** Enable keyboard navigation (disable when Lightbox is open). */
+  keyboardEnabled?: boolean;
 }
 
 // Shared cache: photo.path -> thumbnail URL
@@ -34,9 +36,12 @@ function PhotoGridInner({
   onPhotoClick,
   thumbSize,
   sidebarWidth = 260,
+  keyboardEnabled = true,
 }: PhotoGridProps) {
   const [batchVersion, setBatchVersion] = useState(0);
   const [columns, setColumns] = useState(() => calcGridColumns(window.innerWidth, sidebarWidth));
+  const [focusIndex, setFocusIndex] = useState(-1);
+  const virtuosoRef = useRef<VirtuosoGridHandle>(null);
 
   // Recalculate columns on window resize or sidebar collapse toggle.
   useEffect(() => {
@@ -126,17 +131,101 @@ function PhotoGridInner({
     [columns]
   );
 
+  // Keyboard navigation in grid view
+  useEffect(() => {
+    if (!keyboardEnabled || photos.length === 0) return;
+
+    const handler = (e: KeyboardEvent) => {
+      // Don't interfere with form inputs
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      // Initialize focus if not set
+      const cur = focusIndex < 0 ? 0 : focusIndex;
+
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          if (cur > 0) {
+            const next = cur - 1;
+            setFocusIndex(next);
+            virtuosoRef.current?.scrollToIndex({ index: next });
+          }
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          if (cur < photos.length - 1) {
+            const next = cur + 1;
+            setFocusIndex(next);
+            virtuosoRef.current?.scrollToIndex({ index: next });
+          }
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          if (cur >= columns) {
+            const next = cur - columns;
+            setFocusIndex(next);
+            virtuosoRef.current?.scrollToIndex({ index: next });
+          }
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          if (cur < photos.length - columns) {
+            const next = cur + columns;
+            setFocusIndex(next);
+            virtuosoRef.current?.scrollToIndex({ index: next });
+          }
+          break;
+        case "Enter":
+          e.preventDefault();
+          if (cur >= 0 && cur < photos.length) {
+            onPhotoClick(cur);
+          }
+          break;
+        case " ":
+          e.preventDefault();
+          if (cur >= 0 && cur < photos.length) {
+            const p = photos[cur];
+            onRate(p, p.user_rating ?? 3, "keep");
+          }
+          break;
+        case "x":
+        case "X":
+          if (cur >= 0 && cur < photos.length) {
+            onRate(photos[cur], -1, "reject");
+          }
+          break;
+        case "1":
+        case "2":
+        case "3":
+        case "4":
+        case "5":
+          if (cur >= 0 && cur < photos.length) {
+            onRate(photos[cur], parseInt(e.key), "keep");
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [keyboardEnabled, photos, focusIndex, columns, onPhotoClick, onRate]);
+
   const itemContent = useCallback(
     (index: number) => (
       <VirtualPhotoCell
         photo={photos[index]}
         index={index}
+        focused={index === focusIndex}
         onRate={onRate}
-        onClick={() => onPhotoClick(index)}
+        onClick={() => {
+          setFocusIndex(index);
+          onPhotoClick(index);
+        }}
         cacheVersion={batchVersion}
       />
     ),
-    [photos, onRate, onPhotoClick, batchVersion]
+    [photos, onRate, onPhotoClick, batchVersion, focusIndex]
   );
 
   const computeItemKey = useCallback(
@@ -172,6 +261,7 @@ function PhotoGridInner({
   return (
     <div className="flex-1 bg-base">
       <VirtuosoGrid
+        ref={virtuosoRef}
         key={columns}
         className="h-full custom-scrollbar"
           totalCount={photos.length}
@@ -189,6 +279,7 @@ function PhotoGridInner({
 interface VirtualPhotoCellProps {
   photo: Photo;
   index: number;
+  focused: boolean;
   onRate: (photo: Photo, rating: number | null, status: string) => void;
   onClick: () => void;
   cacheVersion: number;
@@ -196,6 +287,8 @@ interface VirtualPhotoCellProps {
 
 const VirtualPhotoCell = memo(function VirtualPhotoCell({
   photo,
+  index: _index,
+  focused,
   onRate,
   onClick,
   cacheVersion,
@@ -227,13 +320,15 @@ const VirtualPhotoCell = memo(function VirtualPhotoCell({
     <div
       className={`group relative w-full h-full rounded-lg overflow-hidden cursor-pointer
         bg-surface-alt border transition-all duration-200 ease-out
-        ${isKeep
-          ? 'border-keep shadow-[0_0_0_1px] shadow-keep/30'
-          : isReject
-            ? 'border-reject/20 opacity-45 hover:opacity-70'
-            : 'border-base-800/60 hover:border-base-600/60'
+        ${focused
+          ? 'border-accent ring-2 ring-accent/40 shadow-[0_0_12px] shadow-accent/20'
+          : isKeep
+            ? 'border-keep shadow-[0_0_0_1px] shadow-keep/30'
+            : isReject
+              ? 'border-reject/20 opacity-45 hover:opacity-70'
+              : 'border-base-800/60 hover:border-base-600/60'
         }
-        ${!isReject ? 'hover:-translate-y-[3px] hover:shadow-card-hover' : ''}
+        ${!isReject && !focused ? 'hover:-translate-y-[3px] hover:shadow-card-hover' : ''}
       `}
       onClick={onClick}
     >

@@ -1,6 +1,6 @@
 use crate::image_proc;
 use crate::models::{Album, AiScore, ExportResult, Photo, PhotoFilter, ScanResult};
-use crate::scoring;
+use crate::scoring::{self, ScoringWeights};
 use crate::scanner;
 use crate::storage;
 use std::fs;
@@ -314,6 +314,27 @@ pub fn clear_all_cache() -> Result<u64, String> {
     let removed = image_proc::clear_all_cache()?;
     log::info!("Cleared all cache: {} files removed", removed);
     Ok(removed)
+}
+
+/// Get the current scoring weights.
+#[tauri::command]
+pub fn get_scoring_weights() -> ScoringWeights {
+    scoring::get_weights()
+}
+
+/// Update the scoring weights. Returns the normalized weights.
+#[tauri::command]
+pub fn set_scoring_weights(weights: ScoringWeights) -> Result<ScoringWeights, String> {
+    scoring::set_weights(weights.clone());
+    log::info!(
+        "Scoring weights updated: sharpness={}, color={}, composition={}, exposure={}, noise_penalty={}",
+        weights.sharpness,
+        weights.color,
+        weights.composition,
+        weights.exposure,
+        weights.noise_penalty
+    );
+    Ok(weights)
 }
 
 // We need rayon's parallel iterator

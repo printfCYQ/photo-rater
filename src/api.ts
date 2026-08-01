@@ -116,6 +116,24 @@ export async function clearAllCache(): Promise<number> {
   return invoke<number>("clear_all_cache");
 }
 
+/// Get the current scoring weights from Rust backend.
+export async function getScoringWeights(): Promise<ScoringWeights> {
+  return invoke<ScoringWeights>("get_scoring_weights");
+}
+
+/// Update scoring weights on the Rust backend.
+export async function setScoringWeights(weights: ScoringWeights): Promise<ScoringWeights> {
+  return invoke<ScoringWeights>("set_scoring_weights", { weights });
+}
+
+export interface ScoringWeights {
+  sharpness: number;
+  color: number;
+  composition: number;
+  exposure: number;
+  noise_penalty: number;
+}
+
 // Event listeners
 export function onScanComplete(
   callback: (payload: { album_id: number; total: number }) => void

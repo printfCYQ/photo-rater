@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { setScoringWeights, type ScoringWeights } from "../api";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -9,12 +10,14 @@ export type AccentPreset = "teal" | "blue" | "purple" | "rose" | "amber" | "emer
 export interface Settings {
   fontSize: FontSize;
   accentColor: AccentPreset;
+  scoringWeights: ScoringWeights;
 }
 
 interface SettingsContextValue {
   settings: Settings;
   setFontSize: (size: FontSize) => void;
   setAccentColor: (color: AccentPreset) => void;
+  setScoringWeights: (weights: ScoringWeights) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +40,14 @@ const FONT_SIZE_MAP: Record<FontSize, string> = {
 
 const STORAGE_KEY = "photo-rater-settings";
 
+const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
+  sharpness: 0.28,
+  color: 0.30,
+  composition: 0.27,
+  exposure: 0.15,
+  noise_penalty: 0.35,
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -48,10 +59,14 @@ function loadSettings(): Settings {
       return {
         fontSize: parsed.fontSize ?? "md",
         accentColor: parsed.accentColor ?? "teal",
+        scoringWeights: {
+          ...DEFAULT_SCORING_WEIGHTS,
+          ...(parsed.scoringWeights ?? {}),
+        },
       };
     }
   } catch { /* ignore corrupt data */ }
-  return { fontSize: "md", accentColor: "teal" };
+  return { fontSize: "md", accentColor: "teal", scoringWeights: DEFAULT_SCORING_WEIGHTS };
 }
 
 function saveSettings(s: Settings) {
@@ -98,10 +113,14 @@ const SettingsContext = createContext<SettingsContextValue | null>(null);
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(loadSettings);
 
-  // Apply on mount
+  // Apply on mount + sync scoring weights to Rust backend
   useEffect(() => {
     applyAccentToDOM(settings.accentColor);
     applyFontSizeToDOM(settings.fontSize);
+    // Push initial weights to Rust backend
+    setScoringWeights(settings.scoringWeights).catch(() => {
+      // Non-critical: Rust will use defaults if this fails
+    });
   }, []);
 
   const setFontSize = useCallback((size: FontSize) => {
@@ -122,8 +141,20 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const updateScoringWeights = useCallback((weights: ScoringWeights) => {
+    setSettings((prev) => {
+      const next = { ...prev, scoringWeights: weights };
+      saveSettings(next);
+      return next;
+    });
+    // Sync to Rust backend (fire-and-forget)
+    setScoringWeights(weights).catch(() => {});
+  }, []);
+
   return (
-    <SettingsContext.Provider value={{ settings, setFontSize, setAccentColor }}>
+    <SettingsContext.Provider
+      value={{ settings, setFontSize, setAccentColor, setScoringWeights: updateScoringWeights }}
+    >
       {children}
     </SettingsContext.Provider>
   );

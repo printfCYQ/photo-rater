@@ -1,24 +1,73 @@
 use crate::image_proc::HeuristicSignals;
+use serde::{Deserialize, Serialize};
+use std::sync::{LazyLock, RwLock};
+
+/// Configurable scoring weights.
+/// All weights are 0.0–1.0 and will be normalized to sum to 1.0 internally.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoringWeights {
+    /// Sharpness weight (clarity: laplacian + FFT blend)
+    pub sharpness: f64,
+    /// Color harmony weight
+    pub color: f64,
+    /// Composition (rule of thirds) weight
+    pub composition: f64,
+    /// Exposure weight
+    pub exposure: f64,
+    /// Noise penalty strength (0 = no penalty, 1 = full penalty)
+    pub noise_penalty: f64,
+}
+
+impl Default for ScoringWeights {
+    fn default() -> Self {
+        Self {
+            sharpness: 0.28,
+            color: 0.30,
+            composition: 0.27,
+            exposure: 0.15,
+            noise_penalty: 0.35,
+        }
+    }
+}
+
+/// Global scoring weights — mutable at runtime via Tauri command.
+static SCORING_WEIGHTS: LazyLock<RwLock<ScoringWeights>> =
+    LazyLock::new(|| RwLock::new(ScoringWeights::default()));
+
+/// Get the current scoring weights (clone).
+pub fn get_weights() -> ScoringWeights {
+    SCORING_WEIGHTS.read().unwrap().clone()
+}
+
+/// Update the global scoring weights.
+pub fn set_weights(w: ScoringWeights) {
+    let mut guard = SCORING_WEIGHTS.write().unwrap();
+    *guard = w;
+}
 
 /// Calculate composite score from AI score and heuristic signals.
 ///
-/// **Current formula (no AI model):**
-/// ```
+/// Uses the globally configured `ScoringWeights`.
+///
+/// **Without AI model:**
+/// ```text
 /// sharpness = max(laplacian_norm, fft_norm) * 0.7 + min(laplacian_norm, fft_norm) * 0.3
-/// noise_factor = 1.0 - noise_level * 0.35
-/// composite = (sharpness * 0.28 + exposure * 0.15 + color_harmony * 0.30 + composition * 0.27)
+/// noise_factor = 1.0 - noise_level * noise_penalty_weight
+/// composite = (sharpness * w_sharp + exposure * w_exposure + color * w_color + composition * w_composition)
 ///           * noise_factor * 10.0
 /// ```
 ///
-/// **Future formula (with AI model):**
-/// ```
-/// composite = (ai * 0.50 + sharpness * 0.13 + exposure * 0.07 + color_harmony * 0.15 + composition * 0.10)
-///           * noise_factor * 10.0 + noise_model_bonus * 0.05
+/// **With AI model (future):**
+/// ```text
+/// composite = (ai * 0.50 + sharpness * 0.13 + exposure * 0.07 + color * 0.15 + composition * 0.10)
+///           * noise_factor * 10.0 + (1.0 - noise_level) * 0.05
 /// ```
 pub fn calculate_composite_score(
     ai_score: Option<f64>,
     signals: &HeuristicSignals,
 ) -> Option<f64> {
+    let w = get_weights();
+
     // Normalize each signal to 0–1 range
     let laplacian_norm = normalize_laplacian(signals.blur_score);
     let fft_norm = signals.fft_clarity; // already 0–1
@@ -35,24 +84,28 @@ pub fn calculate_composite_score(
     };
 
     // Noise penalty: high noise reduces score
-    let noise_factor = 1.0 - noise_level * 0.35;
+    let noise_factor = 1.0 - noise_level * w.noise_penalty;
+
+    // Normalize weights to sum to 1.0
+    let weight_sum = w.sharpness + w.color + w.composition + w.exposure;
+    let ws = if weight_sum > 0.0 { weight_sum } else { 1.0 };
 
     if let Some(ai) = ai_score {
-        // With AI: weighted blend
+        // With AI: fixed blend (AI 50% + heuristics 50%)
         let ai_norm = (ai / 10.0).clamp(0.0, 1.0);
         let weighted = ai_norm * 0.50
-            + sharpness * 0.13
-            + exposure_norm * 0.07
-            + color_harmony * 0.15
-            + composition * 0.10
+            + sharpness * (w.sharpness / ws) * 0.13
+            + exposure_norm * (w.exposure / ws) * 0.07
+            + color_harmony * (w.color / ws) * 0.15
+            + composition * (w.composition / ws) * 0.10
             + (1.0 - noise_level) * 0.05;
         Some((weighted * noise_factor).clamp(0.0, 1.0) * 10.0)
     } else {
-        // Without AI: heuristics only
-        let weighted = sharpness * 0.28
-            + exposure_norm * 0.15
-            + color_harmony * 0.30
-            + composition * 0.27;
+        // Without AI: heuristics only, using configured weights
+        let weighted = sharpness * (w.sharpness / ws)
+            + exposure_norm * (w.exposure / ws)
+            + color_harmony * (w.color / ws)
+            + composition * (w.composition / ws);
         Some((weighted * noise_factor).clamp(0.0, 1.0) * 10.0)
     }
 }

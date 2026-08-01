@@ -4,6 +4,8 @@ interface ToolbarProps {
   onSortChange: (col: string, desc: boolean) => void;
   statusFilter: string | null;
   onStatusFilterChange: (status: string | null) => void;
+  minScore: number | null;
+  onMinScoreChange: (score: number | null) => void;
   onBatchScore: () => void;
   onExport: () => void;
   scoring: boolean;
@@ -20,6 +22,8 @@ export function Toolbar({
   onSortChange,
   statusFilter,
   onStatusFilterChange,
+  minScore,
+  onMinScoreChange,
   onBatchScore,
   onExport,
   scoring,
@@ -43,6 +47,14 @@ export function Toolbar({
     { value: "pending", label: "待评" },
     { value: "keep", label: "保留" },
     { value: "reject", label: "淘汰" },
+  ];
+
+  const scoreThresholds = [
+    { value: null, label: "不限" },
+    { value: 3, label: "3+" },
+    { value: 5, label: "5+" },
+    { value: 6, label: "6+" },
+    { value: 7, label: "7+" },
   ];
 
   return (
@@ -121,6 +133,28 @@ export function Toolbar({
                   : 'text-base-400 hover:text-base-100'
                 }`}
               onClick={() => onStatusFilterChange(opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Score Threshold */}
+      <div className="flex items-center gap-2">
+        <span className="text-2xs font-semibold uppercase tracking-[0.8px] text-base-500 whitespace-nowrap">
+          最低分
+        </span>
+        <div className="flex gap-0.5 bg-surface-raised rounded-lg p-0.5 border border-base-700/60">
+          {scoreThresholds.map((opt) => (
+            <button
+              key={opt.label}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all duration-150
+                ${minScore === opt.value
+                  ? 'bg-accent text-white font-semibold shadow-sm shadow-accent/25'
+                  : 'text-base-400 hover:text-base-100'
+                }`}
+              onClick={() => onMinScoreChange(opt.value)}
             >
               {opt.label}
             </button>
@@ -243,7 +277,7 @@ export function Toolbar({
                 <div className="flex items-start gap-1.5 mt-3 p-2 rounded-md
                   bg-accent/10 border border-accent/15 text-[11px] text-base-300 leading-relaxed">
                   <div className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 bg-accent-light/60" />
-                  <span>后续版本将接入 <strong className="text-accent-light font-semibold">AI NIMA 模型</strong>（权重 50%），进一步提升评分准确度</span>
+                  <span>权重可在<strong className="text-accent-light font-semibold">设置</strong>中自定义调整 · 后续版本将接入 <strong className="text-accent-light font-semibold">AI NIMA 模型</strong>（权重 50%）</span>
                 </div>
               </div>
             </div>
