@@ -30,3 +30,17 @@ env_logger = "0.11"
 lru = "0.12"
 dirs = "5"
 chrono = { version = "0.4", features = ["serde"] }
+
+# Speed up image decoding in dev mode — debug builds (-O0) are 50-100x slower for JPEG decode.
+# opt-level=1 globally, and opt-level=2 for image/zune-jpeg which are the hot path.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package.image]
+opt-level = 2
+
+[profile.dev.package.zune-jpeg]
+opt-level = 2
+
+[profile.dev.package.zune-core]
+opt-level = 2

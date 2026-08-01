@@ -5,6 +5,7 @@ use crate::scanner;
 use crate::storage;
 use std::fs;
 use std::path::Path;
+use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
 /// Scan a directory and create an album with the found photos.
@@ -59,7 +60,17 @@ pub fn get_thumbnail(path: String, size: u32) -> Result<String, String> {
 /// Returns a list of (path, data_url) pairs for successful ones.
 #[tauri::command]
 pub fn batch_get_thumbnails(paths: Vec<String>, size: u32) -> Result<Vec<(String, String)>, String> {
-    Ok(image_proc::batch_get_thumbnails(&paths, size))
+    let count = paths.len();
+    let t = Instant::now();
+    let result = image_proc::batch_get_thumbnails(&paths, size);
+    let elapsed = t.elapsed();
+    eprintln!(
+        "[perf] batch_get_thumbnails: {:?} ({} images, {} results)",
+        elapsed,
+        count,
+        result.len()
+    );
+    Ok(result)
 }
 
 /// Batch check disk cache for thumbnails without generating new ones.
@@ -82,7 +93,15 @@ pub fn get_preview_image(path: String, max_width: u32) -> Result<String, String>
 /// List photos with filtering.
 #[tauri::command]
 pub fn list_photos(filter: PhotoFilter) -> Result<Vec<Photo>, String> {
-    storage::list_photos(&filter)
+    let t = Instant::now();
+    let result = storage::list_photos(&filter);
+    let elapsed = t.elapsed();
+    eprintln!(
+        "[perf] list_photos: {:?} ({} rows)",
+        elapsed,
+        result.as_ref().map(|v| v.len()).unwrap_or(0)
+    );
+    result
 }
 
 /// List all albums.

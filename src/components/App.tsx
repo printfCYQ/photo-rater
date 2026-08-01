@@ -76,6 +76,8 @@ export function App() {
 
   const loadPhotos = async () => {
     setLoading(true);
+    const label = `[perf] listPhotos IPC (album=${selectedAlbumId})`;
+    console.time(label);
     try {
       const result = await listPhotos({
         album_id: selectedAlbumId,
@@ -83,8 +85,11 @@ export function App() {
         sort_by: sortBy,
         sort_desc: sortDesc,
       });
+      console.timeEnd(label);
+      console.log(`[perf] Got ${result.length} photos`);
       setPhotos(result);
     } catch (e) {
+      console.timeEnd(label);
       console.error("Failed to load photos:", e);
     } finally {
       setLoading(false);

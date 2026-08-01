@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 /// In-memory cache: path+size -> thumbnail file path on disk (fast path, no I/O).
 static THUMB_CACHE: std::sync::LazyLock<Mutex<LruCache<String, PathBuf>>> =
@@ -177,13 +177,48 @@ pub fn get_preview_image(path: &str, max_width: u32) -> Result<String, String> {
 pub fn batch_get_thumbnails(paths: &[String], size: u32) -> Vec<(String, String)> {
     use rayon::prelude::*;
 
-    paths
+    let total = paths.len();
+    let t_total = Instant::now();
+
+    // Per-image timing: collect decode durations for diagnostics
+    let durations: std::sync::Mutex<Vec<std::time::Duration>> =
+        std::sync::Mutex::new(Vec::with_capacity(total));
+
+    let results: Vec<_> = paths
         .par_iter()
-        .filter_map(|path| match get_thumbnail(path, size) {
-            Ok(file_path) => Some((path.clone(), file_path)),
-            Err(_) => None,
+        .filter_map(|path| {
+            let t = Instant::now();
+            let result = get_thumbnail(path, size).ok().map(|fp| (path.clone(), fp));
+            let d = t.elapsed();
+            if let Ok(mut v) = durations.lock() {
+                v.push(d);
+            }
+            result
         })
-        .collect()
+        .collect();
+
+    let total_elapsed = t_total.elapsed();
+
+    // Print timing stats
+    {
+        let durs = durations.lock().unwrap();
+        if !durs.is_empty() {
+            let sum: f64 = durs.iter().map(|d| d.as_secs_f64()).sum();
+            let avg = sum / durs.len() as f64;
+            let min = durs.iter().min().unwrap().as_secs_f64();
+            let max = durs.iter().max().unwrap().as_secs_f64();
+            eprintln!(
+                "[perf] batch_get_thumbnails: per-image decode min={:.0}ms avg={:.0}ms max={:.0}ms (total={:.1}s, {} results)",
+                min * 1000.0,
+                avg * 1000.0,
+                max * 1000.0,
+                total_elapsed.as_secs_f64(),
+                results.len(),
+            );
+        }
+    }
+
+    results
 }
 
 /// Batch check disk cache for thumbnails WITHOUT generating new ones.

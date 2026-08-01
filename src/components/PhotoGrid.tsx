@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useState, useCallback, useMemo, forwardRef } from "react";
 import { VirtuosoGrid } from "react-virtuoso";
 import type { Photo } from "../types";
-import { getThumbnailUrl, getCachedThumbnailUrls } from "../api";
+import { batchGetThumbnailUrls } from "../api";
 
 interface PhotoGridProps {
   photos: Photo[];
@@ -26,9 +26,10 @@ function PhotoGridInner({
   onPhotoClick,
   thumbSize,
 }: PhotoGridProps) {
-  const [, setBatchVersion] = useState(0);
+  const [batchVersion, setBatchVersion] = useState(0);
 
-  // Batch-preload cached thumbnails when photo list changes
+  // Batch-generate all thumbnails in a single parallel IPC call,
+  // so cells never need to fire individual getThumbnailUrl calls.
   useEffect(() => {
     if (photos.length === 0) return;
 
@@ -42,16 +43,23 @@ function PhotoGridInner({
     if (uncachedPaths.length === 0) return;
 
     let cancelled = false;
+    const label = `[perf] batchThumbs IPC (${uncachedPaths.length} images, size=${thumbSize})`;
+    console.time(label);
 
-    getCachedThumbnailUrls(uncachedPaths, thumbSize)
-      .then((cachedMap) => {
+    batchGetThumbnailUrls(uncachedPaths, thumbSize)
+      .then((urlMap) => {
         if (cancelled) return;
-        for (const [path, url] of cachedMap) {
+        console.timeEnd(label);
+        console.log(`[perf] batchThumbs returned ${urlMap.size} URLs`);
+        for (const [path, url] of urlMap) {
           thumbUrlCache.set(path, url);
         }
         setBatchVersion((v) => v + 1);
       })
-      .catch(() => {});
+      .catch((e) => {
+        console.timeEnd(label);
+        console.error("[perf] batchThumbs failed:", e);
+      });
 
     return () => {
       cancelled = true;
@@ -105,10 +113,10 @@ function PhotoGridInner({
         index={index}
         onRate={onRate}
         onClick={() => onPhotoClick(index)}
-        thumbSize={thumbSize}
+        cacheVersion={batchVersion}
       />
     ),
-    [photos, onRate, onPhotoClick, thumbSize]
+    [photos, onRate, onPhotoClick, batchVersion]
   );
 
   const computeItemKey = useCallback(
@@ -163,43 +171,27 @@ interface VirtualPhotoCellProps {
   index: number;
   onRate: (photo: Photo, rating: number | null, status: string) => void;
   onClick: () => void;
-  thumbSize: number;
+  cacheVersion: number;
 }
 
 const VirtualPhotoCell = memo(function VirtualPhotoCell({
   photo,
   onRate,
   onClick,
-  thumbSize,
+  cacheVersion,
 }: VirtualPhotoCellProps) {
   const [thumb, setThumb] = useState<string>(
     () => thumbUrlCache.get(photo.path) || ""
   );
   const [loaded, setLoaded] = useState(!!thumb);
 
-  // Load thumbnail on mount
+  // Re-check thumb cache when batch preload updates the cache.
   useEffect(() => {
-    if (thumb) return;
-
     const cached = thumbUrlCache.get(photo.path);
-    if (cached) {
+    if (cached && cached !== thumb) {
       setThumb(cached);
-      return;
     }
-
-    let cancelled = false;
-
-    getThumbnailUrl(photo.path, thumbSize).then((url) => {
-      if (!cancelled) {
-        thumbUrlCache.set(photo.path, url);
-        setThumb(url);
-      }
-    }).catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [photo.path, thumbSize, thumb]);
+  }, [photo.path, thumb, cacheVersion]);
 
   useEffect(() => {
     if (thumb && !loaded) {
