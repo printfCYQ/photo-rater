@@ -35,6 +35,10 @@ pub fn init_db() -> Result<(), String> {
             ai_score REAL,
             blur_score REAL,
             exposure REAL,
+            fft_clarity REAL,
+            noise_level REAL,
+            color_harmony REAL,
+            composition REAL,
             face_count INTEGER,
             composite_score REAL,
             user_rating INTEGER,
@@ -53,6 +57,34 @@ pub fn init_db() -> Result<(), String> {
         ",
     )
     .map_err(|e| format!("Failed to create tables: {}", e))?;
+
+    // Migration: add new columns for enhanced heuristic signals if they don't exist
+    let migrate_cols = [
+        "fft_clarity REAL",
+        "noise_level REAL",
+        "color_harmony REAL",
+        "composition REAL",
+    ];
+    for col_def in &migrate_cols {
+        let col_name = col_def.split_whitespace().next().unwrap_or("");
+        let has_col: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('photos') WHERE name = ?1",
+                params![col_name],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|n| n > 0)
+            .unwrap_or(false);
+
+        if !has_col {
+            conn.execute(
+                &format!("ALTER TABLE photos ADD COLUMN {}", col_def),
+                [],
+            )
+            .map_err(|e| format!("Failed to add column {}: {}", col_name, e))?;
+            log::info!("Migrated: added column {} to photos", col_name);
+        }
+    }
 
     *DB.lock().unwrap() = Some(conn);
     log::info!("Database initialized at {:?}", db_path);
@@ -150,13 +182,17 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                     ai_score = COALESCE(?8, ai_score),
                     blur_score = COALESCE(?9, blur_score),
                     exposure = COALESCE(?10, exposure),
-                    face_count = COALESCE(?11, face_count),
-                    composite_score = COALESCE(?12, composite_score),
-                    user_rating = COALESCE(?13, user_rating),
-                    status = ?14,
-                    scored_at = COALESCE(?15, scored_at),
-                    rated_at = COALESCE(?16, rated_at),
-                    album_id = COALESCE(?17, album_id)
+                    fft_clarity = COALESCE(?11, fft_clarity),
+                    noise_level = COALESCE(?12, noise_level),
+                    color_harmony = COALESCE(?13, color_harmony),
+                    composition = COALESCE(?14, composition),
+                    face_count = COALESCE(?15, face_count),
+                    composite_score = COALESCE(?16, composite_score),
+                    user_rating = COALESCE(?17, user_rating),
+                    status = ?18,
+                    scored_at = COALESCE(?19, scored_at),
+                    rated_at = COALESCE(?20, rated_at),
+                    album_id = COALESCE(?21, album_id)
                  WHERE id = ?1",
                 params![
                     id,
@@ -169,6 +205,10 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                     photo.ai_score,
                     photo.blur_score,
                     photo.exposure,
+                    photo.fft_clarity,
+                    photo.noise_level,
+                    photo.color_harmony,
+                    photo.composition,
                     photo.face_count,
                     photo.composite_score,
                     photo.user_rating,
@@ -185,9 +225,10 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
             conn.execute(
                 "INSERT INTO photos (
                     path, file_name, dir, file_size, width, height, taken_at,
-                    ai_score, blur_score, exposure, face_count, composite_score,
+                    ai_score, blur_score, exposure, fft_clarity, noise_level, color_harmony, composition,
+                    face_count, composite_score,
                     user_rating, status, scored_at, rated_at, created_at, album_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
                 params![
                     photo.path,
                     photo.file_name,
@@ -199,6 +240,10 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                     photo.ai_score,
                     photo.blur_score,
                     photo.exposure,
+                    photo.fft_clarity,
+                    photo.noise_level,
+                    photo.color_harmony,
+                    photo.composition,
                     photo.face_count,
                     photo.composite_score,
                     photo.user_rating,
@@ -229,9 +274,10 @@ pub fn batch_insert_photos(photos: &[Photo], album_id: i64) -> Result<i64, Strin
             let result = conn.execute(
                 "INSERT OR IGNORE INTO photos (
                     path, file_name, dir, file_size, width, height, taken_at,
-                    ai_score, blur_score, exposure, face_count, composite_score,
+                    ai_score, blur_score, exposure, fft_clarity, noise_level, color_harmony, composition,
+                    face_count, composite_score,
                     user_rating, status, scored_at, rated_at, created_at, album_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
                 params![
                     photo.path,
                     photo.file_name,
@@ -243,6 +289,10 @@ pub fn batch_insert_photos(photos: &[Photo], album_id: i64) -> Result<i64, Strin
                     photo.ai_score,
                     photo.blur_score,
                     photo.exposure,
+                    photo.fft_clarity,
+                    photo.noise_level,
+                    photo.color_harmony,
+                    photo.composition,
                     photo.face_count,
                     photo.composite_score,
                     photo.user_rating,
@@ -277,7 +327,8 @@ pub fn list_photos(filter: &PhotoFilter) -> Result<Vec<Photo>, String> {
     with_db(|conn| {
         let mut sql = String::from(
             "SELECT id, path, file_name, dir, file_size, width, height, taken_at,
-             ai_score, blur_score, exposure, face_count, composite_score,
+             ai_score, blur_score, exposure, fft_clarity, noise_level, color_harmony, composition,
+             face_count, composite_score,
              user_rating, status, scored_at, rated_at, created_at, album_id
              FROM photos WHERE 1=1",
         );
@@ -346,14 +397,18 @@ pub fn list_photos(filter: &PhotoFilter) -> Result<Vec<Photo>, String> {
                     ai_score: row.get(8)?,
                     blur_score: row.get(9)?,
                     exposure: row.get(10)?,
-                    face_count: row.get(11)?,
-                    composite_score: row.get(12)?,
-                    user_rating: row.get(13)?,
-                    status: row.get(14)?,
-                    scored_at: row.get(15)?,
-                    rated_at: row.get(16)?,
-                    created_at: row.get(17)?,
-                    album_id: row.get(18)?,
+                    fft_clarity: row.get(11)?,
+                    noise_level: row.get(12)?,
+                    color_harmony: row.get(13)?,
+                    composition: row.get(14)?,
+                    face_count: row.get(15)?,
+                    composite_score: row.get(16)?,
+                    user_rating: row.get(17)?,
+                    status: row.get(18)?,
+                    scored_at: row.get(19)?,
+                    rated_at: row.get(20)?,
+                    created_at: row.get(21)?,
+                    album_id: row.get(22)?,
                 })
             })
             .map_err(|e| format!("Failed to query photos: {}", e))?
@@ -382,12 +437,16 @@ pub fn update_rating(
     })
 }
 
-/// Update a photo's AI scores.
+/// Update a photo's scores (all heuristic signals + composite).
 pub fn update_scores(
     path: &str,
     ai_score: Option<f64>,
     blur_score: Option<f64>,
     exposure: Option<f64>,
+    fft_clarity: Option<f64>,
+    noise_level: Option<f64>,
+    color_harmony: Option<f64>,
+    composition: Option<f64>,
     composite_score: Option<f64>,
 ) -> Result<bool, String> {
     let now = chrono::Utc::now().timestamp();
@@ -395,8 +454,20 @@ pub fn update_scores(
         let rows = conn
             .execute(
                 "UPDATE photos SET ai_score = ?1, blur_score = ?2, exposure = ?3,
-                 composite_score = ?4, scored_at = ?5 WHERE path = ?6",
-                params![ai_score, blur_score, exposure, composite_score, now, path],
+                 fft_clarity = ?4, noise_level = ?5, color_harmony = ?6, composition = ?7,
+                 composite_score = ?8, scored_at = ?9 WHERE path = ?10",
+                params![
+                    ai_score,
+                    blur_score,
+                    exposure,
+                    fft_clarity,
+                    noise_level,
+                    color_harmony,
+                    composition,
+                    composite_score,
+                    now,
+                    path
+                ],
             )
             .map_err(|e| format!("Failed to update scores: {}", e))?;
         Ok(rows > 0)

@@ -134,7 +134,7 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         if (photo) break;
       }
       if (!photo) {
-        return { path, ai_score: null, blur_score: null, exposure: null, composite_score: null, error: "Photo not found" } as unknown as T;
+        return { path, ai_score: null, blur_score: null, exposure: null, fft_clarity: null, noise_level: null, color_harmony: null, composition: null, composite_score: null, error: "Photo not found" } as unknown as T;
       }
       // Re-use existing or generate
       const aiScore = photo.ai_score ?? 5 + Math.random() * 4;
@@ -144,6 +144,10 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
       photo.ai_score = Math.round(aiScore * 10) / 10;
       photo.blur_score = Math.round(blurScore * 10) / 10;
       photo.exposure = Math.round(exposure);
+      photo.fft_clarity = null;
+      photo.noise_level = null;
+      photo.color_harmony = null;
+      photo.composition = null;
       photo.composite_score = Math.round(composite * 10) / 10;
       photo.scored_at = Date.now();
       return {
@@ -151,6 +155,10 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         ai_score: photo.ai_score,
         blur_score: photo.blur_score,
         exposure: photo.exposure,
+        fft_clarity: photo.fft_clarity,
+        noise_level: photo.noise_level,
+        color_harmony: photo.color_harmony,
+        composition: photo.composition,
         composite_score: photo.composite_score,
         error: null,
       } as unknown as T;
@@ -173,6 +181,10 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
           photo.ai_score = Math.round(aiScore * 10) / 10;
           photo.blur_score = Math.round(blurScore * 10) / 10;
           photo.exposure = Math.round(exposure);
+          photo.fft_clarity = null;
+          photo.noise_level = null;
+          photo.color_harmony = null;
+          photo.composition = null;
           photo.composite_score = Math.round(composite * 10) / 10;
           photo.scored_at = Date.now();
         }
@@ -182,6 +194,10 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
             ai_score: photo.ai_score,
             blur_score: photo.blur_score,
             exposure: photo.exposure,
+            fft_clarity: photo.fft_clarity,
+            noise_level: photo.noise_level,
+            color_harmony: photo.color_harmony,
+            composition: photo.composition,
             composite_score: photo.composite_score,
             error: null,
           });

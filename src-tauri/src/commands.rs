@@ -97,25 +97,34 @@ pub fn rate_photo(path: String, rating: Option<i32>, status: String) -> Result<b
     storage::update_rating(&path, rating, &status)
 }
 
-/// Score a single photo using heuristics (blur + exposure).
-/// AI scoring will be added in M3.
+/// Score a single photo using heuristics (enhanced: 6 signals).
+/// AI scoring will be added in M3b.
 #[tauri::command]
 pub fn score_photo_ai(path: String) -> Result<AiScore, String> {
-    // Calculate heuristic signals
-    let (blur_score, exposure) = image_proc::calculate_heuristics(&path)?;
+    let signals = image_proc::calculate_heuristics(&path)?;
+    let composite = scoring::calculate_composite_score(None, &signals);
 
-    // For now, use heuristics only (AI model will be added in M3)
-    // Use a simple heuristic-based composite score
-    let composite = scoring::calculate_composite_score(None, Some(blur_score), Some(exposure));
-
-    // Update database
-    storage::update_scores(&path, None, Some(blur_score), Some(exposure), composite)?;
+    storage::update_scores(
+        &path,
+        None,
+        Some(signals.blur_score),
+        Some(signals.exposure),
+        Some(signals.fft_clarity),
+        Some(signals.noise_level),
+        Some(signals.color_harmony),
+        Some(signals.composition),
+        composite,
+    )?;
 
     Ok(AiScore {
         path,
         ai_score: None,
-        blur_score: Some(blur_score),
-        exposure: Some(exposure),
+        blur_score: Some(signals.blur_score),
+        exposure: Some(signals.exposure),
+        fft_clarity: Some(signals.fft_clarity),
+        noise_level: Some(signals.noise_level),
+        color_harmony: Some(signals.color_harmony),
+        composition: Some(signals.composition),
         composite_score: composite,
         error: None,
     })
@@ -131,16 +140,29 @@ pub async fn batch_score_ai(paths: Vec<String>, app: AppHandle) -> Result<Vec<Ai
     let results_vec: Vec<Result<AiScore, String>> = paths
         .par_iter()
         .map(|path| {
-            let (blur_score, exposure) = image_proc::calculate_heuristics(path)?;
-            let composite =
-                scoring::calculate_composite_score(None, Some(blur_score), Some(exposure));
-            storage::update_scores(path, None, Some(blur_score), Some(exposure), composite)?;
+            let signals = image_proc::calculate_heuristics(path)?;
+            let composite = scoring::calculate_composite_score(None, &signals);
+            storage::update_scores(
+                path,
+                None,
+                Some(signals.blur_score),
+                Some(signals.exposure),
+                Some(signals.fft_clarity),
+                Some(signals.noise_level),
+                Some(signals.color_harmony),
+                Some(signals.composition),
+                composite,
+            )?;
 
             Ok(AiScore {
                 path: path.clone(),
                 ai_score: None,
-                blur_score: Some(blur_score),
-                exposure: Some(exposure),
+                blur_score: Some(signals.blur_score),
+                exposure: Some(signals.exposure),
+                fft_clarity: Some(signals.fft_clarity),
+                noise_level: Some(signals.noise_level),
+                color_harmony: Some(signals.color_harmony),
+                composition: Some(signals.composition),
                 composite_score: composite,
                 error: None,
             })
@@ -156,6 +178,10 @@ pub async fn batch_score_ai(paths: Vec<String>, app: AppHandle) -> Result<Vec<Ai
                     ai_score: None,
                     blur_score: None,
                     exposure: None,
+                    fft_clarity: None,
+                    noise_level: None,
+                    color_harmony: None,
+                    composition: None,
                     composite_score: None,
                     error: Some(e),
                 });

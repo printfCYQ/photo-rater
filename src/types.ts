@@ -10,6 +10,10 @@ export interface Photo {
   ai_score: number | null;
   blur_score: number | null;
   exposure: number | null;
+  fft_clarity: number | null;
+  noise_level: number | null;
+  color_harmony: number | null;
+  composition: number | null;
   face_count: number | null;
   composite_score: number | null;
   user_rating: number | null;
@@ -51,6 +55,10 @@ export interface AiScore {
   ai_score: number | null;
   blur_score: number | null;
   exposure: number | null;
+  fft_clarity: number | null;
+  noise_level: number | null;
+  color_harmony: number | null;
+  composition: number | null;
   composite_score: number | null;
   error: string | null;
 }
