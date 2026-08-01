@@ -1,6 +1,8 @@
 # Photo Rater - 照片打分筛选
 
 一款本地优先的桌面照片打分与筛选工具。扫描文件夹导入照片，通过 AI 启发式评分 + 手动评分快速筛选，批量导出精选照片。基于 Tauri v2 + React 19 + Rust 构建。
+![Photo Rater 截图](./public/screenshoot.png)
+
 
 ## 功能特性
 
