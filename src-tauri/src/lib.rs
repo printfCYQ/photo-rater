@@ -5,6 +5,8 @@ mod scanner;
 mod scoring;
 mod storage;
 
+use tauri::Manager;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
@@ -13,7 +15,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .setup(|_app| {
+        .setup(|app| {
+            // Set webview background transparent — critical for macOS rounded corners
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_background_color(Some((0, 0, 0, 0).into()));
+            }
+
             // Initialize database
             storage::init_db()
                 .map_err(|e| {

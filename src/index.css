@@ -18,6 +18,7 @@
     height: 100%;
     width: 100%;
     overflow: hidden;
+    border-radius: 10px;
   }
 
   body {
@@ -26,6 +27,7 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    border-radius: 10px;
   }
 
   button {
@@ -183,6 +185,43 @@
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+  }
+
+  /* Titlebar — macOS traffic light buttons */
+  .traffic-light {
+    @apply w-3 h-3 rounded-full flex items-center justify-center
+           transition-colors duration-150;
+    -webkit-app-region: no-drag;
+  }
+
+  .traffic-light-close {
+    background: #FF5F57;
+  }
+  .traffic-light-close:hover {
+    background: #FF3B30;
+  }
+
+  .traffic-light-minimize {
+    background: #FFBD2E;
+  }
+  .traffic-light-minimize:hover {
+    background: #FF9F0A;
+  }
+
+  .traffic-light-maximize {
+    background: #28CA41;
+  }
+  .traffic-light-maximize:hover {
+    background: #00B028;
+  }
+
+  .traffic-light-icon {
+    @apply opacity-0 transition-opacity duration-150;
+    color: rgba(0, 0, 0, 0.55);
+  }
+
+  .traffic-light:hover .traffic-light-icon {
+    @apply opacity-100;
   }
 
   /* Lightbox prev/next navigation buttons */

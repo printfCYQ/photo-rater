@@ -16,6 +16,12 @@
     "fs:allow-mkdir",
     "fs:allow-copy-file",
     "core:event:default",
-    "core:path:default"
+    "core:path:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-start-dragging",
+    "core:webview:allow-set-webview-background-color"
   ]
 }

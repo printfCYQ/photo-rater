@@ -14,6 +14,7 @@ import {
 } from "../api";
 import type { Album, Photo, PhotoStats } from "../types";
 import { Sidebar } from "./Sidebar";
+import { Titlebar } from "./Titlebar";
 import { Toolbar } from "./Toolbar";
 import { PhotoGrid, thumbUrlCache } from "./PhotoGrid";
 import { Lightbox } from "./Lightbox";
@@ -237,12 +238,15 @@ export function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-base relative">
+    <div className="flex flex-col h-screen w-screen bg-base relative overflow-hidden">
       {/* Ambient accent glows */}
       <div className="ambient-glow-tl" />
       <div className="ambient-glow-br" />
 
-      <Sidebar
+      <Titlebar />
+
+      <div className="flex flex-1 min-h-0">
+        <Sidebar
         albums={albums}
         selectedAlbumId={selectedAlbumId}
         onSelectAlbum={setSelectedAlbumId}
@@ -279,6 +283,7 @@ export function App() {
           sidebarWidth={sidebarCollapsed ? 0 : 260}
         />
         <StatusBar stats={stats} photoCount={photos.length} loading={loading} />
+      </div>
       </div>
       {lightboxIndex !== null && photos[lightboxIndex] && (
         <Lightbox
