@@ -216,7 +216,7 @@ export function App() {
         onDeleteAlbum={handleDeleteAlbum}
         stats={stats}
       />
-      <div className="flex-1 flex flex-col overflow-hidden relative z-[1]">
+      <div className="flex-1 flex flex-col relative z-[1]">
         <Toolbar
           sortBy={sortBy}
           sortDesc={sortDesc}

@@ -133,16 +133,69 @@ export function Toolbar({
           </div>
         ) : (
           <>
-            <button
-              className="btn-secondary text-[13px] py-1.5 px-3.5"
-              onClick={onBatchScore}
-              disabled={photoCount === 0}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-              </svg>
-              批量评分
-            </button>
+            <div className="scoring-tooltip-trigger">
+              <button
+                className="btn-secondary text-[13px] py-1.5 px-3.5"
+                onClick={onBatchScore}
+                disabled={photoCount === 0}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                批量评分
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="ml-0.5 opacity-50">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </button>
+
+              {/* Scoring Rules Tooltip */}
+              <div className="scoring-tooltip w-80 p-3.5 rounded-xl
+                bg-surface-overlay border border-base-700/60
+                shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+                {/* Title */}
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-accent" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                  <span className="text-[13px] font-bold text-base-50">评分规则</span>
+                </div>
+
+                {/* Formula */}
+                <div className="flex flex-col gap-1 p-2.5 mb-2.5 rounded-lg
+                  bg-base-800/60 border border-base-700/40
+                  font-mono text-[11px] leading-relaxed">
+                  <span className="text-base-200">综合分 = (清晰度 × 0.67 + 曝光 × 0.33) × 10</span>
+                  <span className="font-bold text-warning-light">→ 0 – 10 分</span>
+                </div>
+
+                {/* Clarity */}
+                <div className="flex items-start gap-2 py-1">
+                  <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-accent shadow-[0_0_6px_rgba(8,151,168,0.5)]" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-base-100">清晰度 (权重 67%)</div>
+                    <div className="text-[11px] text-base-300 leading-relaxed">Laplacian 方差算法检测图像边缘锐度，越高越清晰</div>
+                  </div>
+                </div>
+
+                {/* Exposure */}
+                <div className="flex items-start gap-2 py-1">
+                  <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-warning shadow-[0_0_6px_rgba(245,158,11,0.5)]" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-base-100">曝光 (权重 33%)</div>
+                    <div className="text-[11px] text-base-300 leading-relaxed">平均亮度越接近中间值（128）评分越高，过曝或欠曝均扣分</div>
+                  </div>
+                </div>
+
+                {/* Future */}
+                <div className="flex items-start gap-1.5 mt-2 p-2 rounded-md
+                  bg-accent/10 border border-accent/15 text-[11px] text-base-300 leading-relaxed">
+                  <div className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 bg-accent-light/60" />
+                  <span>后续版本将接入 <strong className="text-accent-light font-semibold">AI NIMA 模型</strong>（权重 70%），届时评分会更贴近人眼审美</span>
+                </div>
+              </div>
+            </div>
             <button
               className="btn-secondary text-[13px] py-1.5 px-3.5"
               onClick={onExport}
