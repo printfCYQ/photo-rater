@@ -408,23 +408,40 @@ export function Lightbox({
                   <TransformComponent
                     wrapperClass="lightbox-zoom-wrapper"
                     contentClass="lightbox-zoom-content"
+                    // These inline styles MUST win over the library's default
+                    // inline `width: fit-content` on the wrapper.  If the
+                    // wrapper stays fit-content it is only as wide as the
+                    // image, so zoom/pan is confined to that small box.
+                    wrapperStyle={{
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    contentStyle={{
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
                   >
                     <img
                       src={imgSrc}
                       alt={photo?.file_name || ""}
                       draggable={false}
                       onLoad={() => {
-                        // Setting imgLoaded triggers the centering effect
-                        // below — we don't call centerView here to avoid
-                        // racing the layout pass.
                         setImgLoaded(true);
                       }}
                       onError={handleImgError}
                       style={{
                         transform: imgTransform,
                         transition: "transform 0.2s ease",
-                        maxWidth: "90vw",
-                        maxHeight: "75vh",
+                        maxWidth: "100%",
+                        maxHeight: "100%",
+                        width: "auto",
+                        height: "auto",
                         objectFit: "contain",
                       }}
                     />
