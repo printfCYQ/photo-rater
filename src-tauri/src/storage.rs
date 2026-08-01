@@ -553,6 +553,21 @@ pub struct PhotoStats {
     pub rejected: i64,
 }
 
+/// Get all photo paths for an album (used for cache cleanup before deletion).
+pub fn get_album_photo_paths(album_id: i64) -> Result<Vec<String>, String> {
+    with_db(|conn| {
+        let mut stmt = conn
+            .prepare("SELECT path FROM photos WHERE album_id = ?1")
+            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+        let paths = stmt
+            .query_map(params![album_id], |row| row.get::<_, String>(0))
+            .map_err(|e| format!("Failed to query paths: {}", e))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(paths)
+    })
+}
+
 /// Delete an album and its photos.
 pub fn delete_album(album_id: i64) -> Result<bool, String> {
     with_db(|conn| {

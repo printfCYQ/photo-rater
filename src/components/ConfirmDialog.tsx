@@ -7,6 +7,7 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: "danger" | "default";
+  extraContent?: React.ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -18,6 +19,7 @@ export function ConfirmDialog({
   confirmLabel = "确认",
   cancelLabel = "取消",
   variant = "default",
+  extraContent,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -79,6 +81,11 @@ export function ConfirmDialog({
         {/* Content */}
         <h3 className="text-[15px] font-semibold text-base-50 mb-1.5">{title}</h3>
         <p className="text-[13px] text-base-400 leading-relaxed">{message}</p>
+
+        {/* Extra content slot (e.g. checkbox) */}
+        {extraContent && (
+          <div className="mt-4">{extraContent}</div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-2.5 mt-5">

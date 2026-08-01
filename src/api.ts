@@ -107,8 +107,13 @@ export async function getStats(albumId?: number | null): Promise<PhotoStats> {
   return invoke<PhotoStats>("get_stats", { albumId: albumId ?? null });
 }
 
-export async function deleteAlbum(albumId: number): Promise<boolean> {
-  return invoke<boolean>("delete_album", { albumId });
+export async function deleteAlbum(albumId: number, clearCache: boolean = false): Promise<boolean> {
+  return invoke<boolean>("delete_album", { albumId, clearCache });
+}
+
+/// Clear all thumbnail cache (disk + memory).
+export async function clearAllCache(): Promise<number> {
+  return invoke<number>("clear_all_cache");
 }
 
 // Event listeners

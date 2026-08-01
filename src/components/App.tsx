@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   batchScoreAi,
+  clearAllCache,
   deleteAlbum,
   exportSelection,
   getStats,
@@ -14,7 +15,7 @@ import {
 import type { Album, Photo, PhotoStats } from "../types";
 import { Sidebar } from "./Sidebar";
 import { Toolbar } from "./Toolbar";
-import { PhotoGrid } from "./PhotoGrid";
+import { PhotoGrid, thumbUrlCache } from "./PhotoGrid";
 import { Lightbox } from "./Lightbox";
 import { StatusBar } from "./StatusBar";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -37,6 +38,7 @@ export function App() {
     albumId: number;
     albumName: string;
   } | null>(null);
+  const [deleteClearCache, setDeleteClearCache] = useState(false);
 
   // Load albums on mount
   useEffect(() => {
@@ -165,13 +167,17 @@ export function App() {
 
   const handleDeleteAlbum = (albumId: number, albumName: string) => {
     setDeleteConfirm({ albumId, albumName });
+    setDeleteClearCache(false);
   };
 
   const handleConfirmDelete = async () => {
     if (!deleteConfirm) return;
     const { albumId } = deleteConfirm;
     try {
-      await deleteAlbum(albumId);
+      await deleteAlbum(albumId, deleteClearCache);
+      if (deleteClearCache) {
+        thumbUrlCache.clear();
+      }
       await loadAlbums();
       if (selectedAlbumId === albumId) {
         setSelectedAlbumId(null);
@@ -181,6 +187,17 @@ export function App() {
       alert(`删除失败: ${e}`);
     } finally {
       setDeleteConfirm(null);
+    }
+  };
+
+  const handleClearAllCache = async () => {
+    try {
+      const removed = await clearAllCache();
+      thumbUrlCache.clear();
+      alert(`已清理 ${removed} 个缓存文件`);
+    } catch (e) {
+      console.error("Failed to clear cache:", e);
+      alert(`清理缓存失败: ${e}`);
     }
   };
 
@@ -230,6 +247,7 @@ export function App() {
         onSelectAlbum={setSelectedAlbumId}
         onScanDirectory={handleScanDirectory}
         onDeleteAlbum={handleDeleteAlbum}
+        onClearCache={handleClearAllCache}
         stats={stats}
       />
       <div className="flex-1 flex flex-col relative z-[1]">
@@ -275,6 +293,32 @@ export function App() {
         confirmLabel="删除"
         cancelLabel="取消"
         variant="danger"
+        extraContent={
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={deleteClearCache}
+                onChange={(e) => setDeleteClearCache(e.target.checked)}
+                className="sr-only"
+              />
+              <div
+                className={`w-4 h-4 rounded border transition-colors duration-150 flex items-center justify-center
+                  ${deleteClearCache
+                    ? 'bg-accent border-accent'
+                    : 'bg-surface-alt border-base-600 hover:border-base-500'
+                  }`}
+              >
+                {deleteClearCache && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
+            </div>
+            <span className="text-[13px] text-base-400">同时清理该相册的缩略图缓存</span>
+          </label>
+        }
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteConfirm(null)}
       />

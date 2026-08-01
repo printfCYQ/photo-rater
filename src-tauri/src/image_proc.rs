@@ -15,8 +15,11 @@ static THUMB_CACHE: std::sync::LazyLock<Mutex<LruCache<String, PathBuf>>> =
         Mutex::new(LruCache::new(NonZeroUsize::new(2000).unwrap()))
     });
 
-/// Use Triangle filter for thumbnails — 5x faster than Lanczos3, quality is fine at small sizes.
-const THUMB_FILTER: FilterType = FilterType::Triangle;
+/// Use Nearest filter for thumbnails — fastest, quality is fine at 300-400px display size.
+const THUMB_FILTER: FilterType = FilterType::Nearest;
+
+/// Use Triangle for lightbox preview and heuristics analysis — better quality where it matters.
+const DETAIL_FILTER: FilterType = FilterType::Triangle;
 
 /// Get the thumbnail cache directory, creating it if needed.
 fn cache_dir() -> Result<PathBuf, String> {
@@ -152,7 +155,7 @@ pub fn get_preview_image(path: &str, max_width: u32) -> Result<String, String> {
 
     // Resize to fit within max_width while maintaining aspect ratio
     let preview = if img.width() > max_width {
-        img.resize(max_width, u32::MAX, THUMB_FILTER)
+        img.resize(max_width, u32::MAX, DETAIL_FILTER)
     } else {
         img
     };
@@ -219,6 +222,90 @@ pub fn batch_get_thumbnails(paths: &[String], size: u32) -> Vec<(String, String)
     }
 
     results
+}
+
+/// Clear thumbnail cache for specific photo paths.
+/// Removes both memory cache entries and disk cache files for all thumbnail sizes.
+pub fn clear_album_cache(paths: &[String]) -> u64 {
+    let mut removed = 0u64;
+
+    // Determine all possible size variants (thumbnail + preview)
+    let sizes: &[u32] = &[300, 400, 800, 1600];
+
+    // Clear memory cache
+    if let Ok(mut cache) = THUMB_CACHE.lock() {
+        // Collect keys to remove
+        let keys_to_remove: Vec<String> = paths
+            .iter()
+            .flat_map(|path| {
+                sizes.iter().flat_map(move |&size| {
+                    vec![
+                        format!("{}|{}", path, size),
+                        format!("preview|{}|{}", path, size),
+                    ]
+                })
+            })
+            .collect();
+
+        for key in &keys_to_remove {
+            cache.pop(key);
+        }
+    }
+
+    // Clear disk cache
+    if let Ok(dir) = cache_dir() {
+        for path in paths {
+            for &size in sizes {
+                let thumb_key = format!("{}|{}", path, size);
+                let thumb_hash = hash_path(&thumb_key);
+                let thumb_file = dir.join(format!("{}_{}.jpg", thumb_hash, size));
+                if thumb_file.exists() {
+                    if fs::remove_file(&thumb_file).is_ok() {
+                        removed += 1;
+                    }
+                }
+
+                let preview_key = format!("preview|{}|{}", path, size);
+                let preview_hash = hash_path(&preview_key);
+                let preview_file = dir.join(format!("preview_{}_{}.jpg", preview_hash, size));
+                if preview_file.exists() {
+                    if fs::remove_file(&preview_file).is_ok() {
+                        removed += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    removed
+}
+
+/// Clear ALL thumbnail cache — both memory and disk.
+pub fn clear_all_cache() -> Result<u64, String> {
+    let mut removed = 0u64;
+
+    // Clear memory cache
+    if let Ok(mut cache) = THUMB_CACHE.lock() {
+        cache.clear();
+    }
+
+    // Clear disk cache directory
+    let dir = cache_dir()?;
+    if dir.exists() {
+        let entries = fs::read_dir(&dir)
+            .map_err(|e| format!("Failed to read cache dir: {}", e))?;
+        for entry in entries {
+            if let Ok(entry) = entry {
+                if entry.path().is_file() {
+                    if fs::remove_file(entry.path()).is_ok() {
+                        removed += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(removed)
 }
 
 /// Batch check disk cache for thumbnails WITHOUT generating new ones.
@@ -299,9 +386,9 @@ pub fn calculate_heuristics(path: &str) -> Result<HeuristicSignals, String> {
     let max_side = 512u32;
     let small = if w > max_side || h > max_side {
         if w > h {
-            img.resize(max_side, u32::MAX, THUMB_FILTER)
+            img.resize(max_side, u32::MAX, DETAIL_FILTER)
         } else {
-            img.resize(u32::MAX, max_side, THUMB_FILTER)
+            img.resize(u32::MAX, max_side, DETAIL_FILTER)
         }
     } else {
         img
@@ -394,7 +481,7 @@ fn fft_clarity_score(gray: &image::GrayImage) -> f64 {
     // Downsample to half and compute gradient
     let half_w = w / 2;
     let half_h = h / 2;
-    let half = image::imageops::resize(gray, half_w, half_h, THUMB_FILTER);
+    let half = image::imageops::resize(gray, half_w, half_h, DETAIL_FILTER);
     let half_grad = gradient_magnitude_sum(&half, 1);
 
     // Ratio: fine detail energy relative to coarse structure

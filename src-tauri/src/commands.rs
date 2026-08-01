@@ -291,10 +291,29 @@ pub fn get_stats(album_id: Option<i64>) -> Result<storage::PhotoStats, String> {
     storage::get_stats(album_id)
 }
 
-/// Delete an album and its photos.
+/// Delete an album and its photos. Optionally clear thumbnail cache.
 #[tauri::command]
-pub fn delete_album(album_id: i64) -> Result<bool, String> {
-    storage::delete_album(album_id)
+pub fn delete_album(album_id: i64, clear_cache: Option<bool>) -> Result<bool, String> {
+    // If cache cleanup is requested, get photo paths first
+    if clear_cache.unwrap_or(false) {
+        let paths = storage::get_album_photo_paths(album_id)?;
+        // Delete DB records
+        let result = storage::delete_album(album_id)?;
+        // Clean cache
+        let removed = image_proc::clear_album_cache(&paths);
+        log::info!("Cleared {} cache files for album {}", removed, album_id);
+        Ok(result)
+    } else {
+        storage::delete_album(album_id)
+    }
+}
+
+/// Clear all thumbnail cache (disk + memory).
+#[tauri::command]
+pub fn clear_all_cache() -> Result<u64, String> {
+    let removed = image_proc::clear_all_cache()?;
+    log::info!("Cleared all cache: {} files removed", removed);
+    Ok(removed)
 }
 
 // We need rayon's parallel iterator

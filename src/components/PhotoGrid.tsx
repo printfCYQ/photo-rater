@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useState, useCallback, useMemo, forwardRef } from "react";
+import React, { memo, useEffect, useState, useCallback, useMemo, useRef, forwardRef } from "react";
 import { VirtuosoGrid } from "react-virtuoso";
 import type { Photo } from "../types";
 import { batchGetThumbnailUrls } from "../api";
@@ -27,6 +27,29 @@ function PhotoGridInner({
   thumbSize,
 }: PhotoGridProps) {
   const [batchVersion, setBatchVersion] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [columns, setColumns] = useState(3);
+
+  // ResizeObserver: dynamically calculate column count from container width.
+  // Must use stable column count with VirtuosoGrid — CSS Grid auto-fill
+  // causes infinite remeasure loops because Virtuoso can't predict row count.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const calcCols = () => {
+      const w = el.clientWidth;
+      // Available width minus padding on both sides
+      const avail = w - GRID_PADDING * 2;
+      const cols = Math.max(1, Math.floor((avail + GRID_GAP) / (ITEM_MIN_WIDTH + GRID_GAP)));
+      setColumns((prev) => (prev !== cols ? cols : prev));
+    };
+
+    calcCols(); // initial
+    const ro = new ResizeObserver(() => calcCols());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Batch-generate all thumbnails in a single parallel IPC call,
   // so cells never need to fire individual getThumbnailUrl calls.
@@ -40,7 +63,10 @@ function PhotoGridInner({
       }
     }
 
-    if (uncachedPaths.length === 0) return;
+    if (uncachedPaths.length === 0) {
+      console.log(`[perf] batchThumbs: all ${photos.length} thumbnails cached, skipping IPC`);
+      return;
+    }
 
     let cancelled = false;
     const label = `[perf] batchThumbs IPC (${uncachedPaths.length} images, size=${thumbSize})`;
@@ -66,8 +92,8 @@ function PhotoGridInner({
     };
   }, [photos, thumbSize]);
 
-  // Grid components — CSS Grid auto-fill handles column count natively.
-  // Never recreated (stable references) so Virtuoso does not remount.
+  // Grid components — use fixed column count so Virtuoso can predict row count.
+  // Recreated only when columns changes (user resizes window).
   const gridComponents = useMemo(
     () => ({
       List: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
@@ -78,7 +104,7 @@ function PhotoGridInner({
               {...props}
               style={{
                 display: "grid",
-                gridTemplateColumns: `repeat(auto-fill, minmax(${ITEM_MIN_WIDTH}px, 1fr))`,
+                gridTemplateColumns: `repeat(${columns}, 1fr)`,
                 gap: `${GRID_GAP}px`,
                 paddingTop: `${GRID_PADDING}px`,
                 paddingRight: `${GRID_PADDING}px`,
@@ -103,7 +129,7 @@ function PhotoGridInner({
         </div>
       ),
     }),
-    []
+    [columns]
   );
 
   const itemContent = useCallback(
@@ -150,15 +176,15 @@ function PhotoGridInner({
   }
 
   return (
-    <div className="flex-1 bg-base">
+    <div ref={containerRef} className="flex-1 bg-base">
       <VirtuosoGrid
+        key={columns}
         className="h-full custom-scrollbar"
         totalCount={photos.length}
         itemContent={itemContent}
         components={gridComponents}
         computeItemKey={computeItemKey}
-        overscan={200}
-        increaseViewportBy={{ top: 200, bottom: 200 }}
+        overscan={300}
       />
     </div>
   );

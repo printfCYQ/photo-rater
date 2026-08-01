@@ -39,6 +39,7 @@ pub fn run() {
             commands::export_selection,
             commands::get_stats,
             commands::delete_album,
+            commands::clear_all_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
