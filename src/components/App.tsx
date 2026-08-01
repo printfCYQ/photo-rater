@@ -17,6 +17,7 @@ import { Toolbar } from "./Toolbar";
 import { PhotoGrid } from "./PhotoGrid";
 import { Lightbox } from "./Lightbox";
 import { StatusBar } from "./StatusBar";
+import { ConfirmDialog } from "./ConfirmDialog";
 import "../index.css";
 
 export function App() {
@@ -31,6 +32,11 @@ export function App() {
   const [sortDesc, setSortDesc] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    albumId: number;
+    albumName: string;
+  } | null>(null);
 
   // Load albums on mount
   useEffect(() => {
@@ -152,10 +158,13 @@ export function App() {
     }
   };
 
-  const handleDeleteAlbum = async (albumId: number) => {
-    if (!confirm("确定要删除这个相册吗？相册中的照片评分记录将被清除，但原始文件不会被删除。")) {
-      return;
-    }
+  const handleDeleteAlbum = (albumId: number, albumName: string) => {
+    setDeleteConfirm({ albumId, albumName });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm) return;
+    const { albumId } = deleteConfirm;
     try {
       await deleteAlbum(albumId);
       await loadAlbums();
@@ -165,6 +174,8 @@ export function App() {
     } catch (e) {
       console.error("Failed to delete album:", e);
       alert(`删除失败: ${e}`);
+    } finally {
+      setDeleteConfirm(null);
     }
   };
 
@@ -250,6 +261,18 @@ export function App() {
           onRate={handleRate}
         />
       )}
+
+      {/* Delete album confirmation */}
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        title="删除相册"
+        message={`确定要删除相册「${deleteConfirm?.albumName}」吗？相册中的照片评分记录将被清除，但原始文件不会被删除。`}
+        confirmLabel="删除"
+        cancelLabel="取消"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </div>
   );
 }

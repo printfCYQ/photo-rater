@@ -5,7 +5,7 @@ interface SidebarProps {
   selectedAlbumId: number | null;
   onSelectAlbum: (id: number) => void;
   onScanDirectory: () => void;
-  onDeleteAlbum: (id: number) => void;
+  onDeleteAlbum: (id: number, name: string) => void;
   stats: PhotoStats | null;
 }
 
@@ -116,7 +116,7 @@ export function Sidebar({
                       hover:text-reject hover:bg-reject/10 transition-all duration-150 flex-shrink-0 ml-1"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDeleteAlbum(album.id!);
+                      onDeleteAlbum(album.id!, album.name);
                     }}
                     title="删除相册"
                   >
