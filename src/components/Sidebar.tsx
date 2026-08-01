@@ -8,6 +8,7 @@ interface SidebarProps {
   onDeleteAlbum: (id: number, name: string) => void;
   onClearCache: () => void;
   stats: PhotoStats | null;
+  collapsed: boolean;
 }
 
 export function Sidebar({
@@ -18,27 +19,34 @@ export function Sidebar({
   onDeleteAlbum,
   onClearCache,
   stats,
+  collapsed,
 }: SidebarProps) {
   return (
-    <aside className="w-[260px] bg-surface flex flex-col flex-shrink-0 border-r border-base-800/60 relative z-10">
+    <aside
+      className={`bg-surface flex flex-col flex-shrink-0 border-r border-base-800/60 relative z-10 overflow-hidden
+        transition-all duration-300 ease-in-out
+        ${collapsed ? '!w-0 opacity-0 border-r-0' : 'w-[260px] opacity-100'}`}
+    >
       {/* Header */}
       <div className="px-[18px] pt-5 pb-4 border-b border-base-800/60 relative">
         {/* Subtle accent line */}
         <div className="absolute bottom-0 left-[18px] right-[18px] h-px bg-gradient-to-r from-transparent via-accent/20 to-transparent" />
 
-        <div className="flex items-center gap-2.5">
-          {/* Brand icon */}
-          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-accent to-accent-700 flex items-center justify-center flex-shrink-0 shadow-md shadow-accent/25">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-[15px] font-bold text-base-50 tracking-[-0.2px] leading-tight">
-              Photo Rater
-            </h1>
-            <p className="text-2xs text-base-500 mt-0.5">照片筛选管理</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            {/* Brand icon */}
+            <div className="w-8 h-8 rounded-md bg-gradient-to-br from-accent to-accent-700 flex items-center justify-center flex-shrink-0 shadow-md shadow-accent/25">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-[15px] font-bold text-base-50 tracking-[-0.2px] leading-tight">
+                Photo Rater
+              </h1>
+              <p className="text-2xs text-base-500 mt-0.5">照片筛选管理</p>
+            </div>
           </div>
         </div>
       </div>

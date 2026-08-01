@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useState, useCallback, useMemo, useRef, forwardRef } from "react";
+import React, { memo, useEffect, useState, useCallback, useMemo, forwardRef } from "react";
 import { VirtuosoGrid } from "react-virtuoso";
 import type { Photo } from "../types";
 import { batchGetThumbnailUrls } from "../api";
@@ -9,6 +9,8 @@ interface PhotoGridProps {
   onRate: (photo: Photo, rating: number | null, status: string) => void;
   onPhotoClick: (index: number) => void;
   thumbSize: number;
+  /** Current sidebar width in px, 0 if collapsed. Defaults to 260. */
+  sidebarWidth?: number;
 }
 
 // Shared cache: photo.path -> thumbnail URL
@@ -19,37 +21,29 @@ const GRID_PADDING = 14;
 const ITEM_MIN_WIDTH = 240;
 const ITEM_HEIGHT = 260;
 
+function calcGridColumns(viewportWidth: number, sidebarWidth: number): number {
+  const gridWidth = viewportWidth - sidebarWidth;
+  const avail = gridWidth - GRID_PADDING * 2;
+  return Math.max(1, Math.floor((avail + GRID_GAP) / (ITEM_MIN_WIDTH + GRID_GAP)));
+}
+
 function PhotoGridInner({
   photos,
   loading,
   onRate,
   onPhotoClick,
   thumbSize,
+  sidebarWidth = 260,
 }: PhotoGridProps) {
   const [batchVersion, setBatchVersion] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [columns, setColumns] = useState(3);
+  const [columns, setColumns] = useState(() => calcGridColumns(window.innerWidth, sidebarWidth));
 
-  // ResizeObserver: dynamically calculate column count from container width.
-  // Must use stable column count with VirtuosoGrid — CSS Grid auto-fill
-  // causes infinite remeasure loops because Virtuoso can't predict row count.
+  // Recalculate columns on window resize or sidebar collapse toggle.
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const calcCols = () => {
-      const w = el.clientWidth;
-      // Available width minus padding on both sides
-      const avail = w - GRID_PADDING * 2;
-      const cols = Math.max(1, Math.floor((avail + GRID_GAP) / (ITEM_MIN_WIDTH + GRID_GAP)));
-      setColumns((prev) => (prev !== cols ? cols : prev));
-    };
-
-    calcCols(); // initial
-    const ro = new ResizeObserver(() => calcCols());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    const onResize = () => setColumns(calcGridColumns(window.innerWidth, sidebarWidth));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [sidebarWidth]);
 
   // Batch-generate all thumbnails in a single parallel IPC call,
   // so cells never need to fire individual getThumbnailUrl calls.
@@ -176,16 +170,16 @@ function PhotoGridInner({
   }
 
   return (
-    <div ref={containerRef} className="flex-1 bg-base">
+    <div className="flex-1 bg-base">
       <VirtuosoGrid
         key={columns}
         className="h-full custom-scrollbar"
-        totalCount={photos.length}
-        itemContent={itemContent}
-        components={gridComponents}
-        computeItemKey={computeItemKey}
-        overscan={300}
-      />
+          totalCount={photos.length}
+          itemContent={itemContent}
+          components={gridComponents}
+          computeItemKey={computeItemKey}
+          overscan={300}
+        />
     </div>
   );
 }

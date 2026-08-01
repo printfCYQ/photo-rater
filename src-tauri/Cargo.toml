@@ -37,14 +37,8 @@ chrono = { version = "0.4", features = ["serde"] }
 opt-level = 1
 codegen-units = 16
 
-[profile.dev.package.image]
-opt-level = 1
-
 [profile.dev.package.zune-jpeg]
 opt-level = 2
 
 [profile.dev.package.zune-core]
-opt-level = 2
-
-[profile.dev.package.jpeg-decoder]
 opt-level = 2

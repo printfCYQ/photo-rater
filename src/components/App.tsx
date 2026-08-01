@@ -39,6 +39,7 @@ export function App() {
     albumName: string;
   } | null>(null);
   const [deleteClearCache, setDeleteClearCache] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Load albums on mount
   useEffect(() => {
@@ -249,6 +250,7 @@ export function App() {
         onDeleteAlbum={handleDeleteAlbum}
         onClearCache={handleClearAllCache}
         stats={stats}
+        collapsed={sidebarCollapsed}
       />
       <div className="flex-1 flex flex-col relative z-[1]">
         <Toolbar
@@ -265,6 +267,8 @@ export function App() {
           scoring={scoring}
           scoreProgress={scoreProgress}
           photoCount={photos.length}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
         />
         <PhotoGrid
           photos={photos}
@@ -272,6 +276,7 @@ export function App() {
           onRate={handleRate}
           onPhotoClick={(index) => setLightboxIndex(index)}
           thumbSize={400}
+          sidebarWidth={sidebarCollapsed ? 0 : 260}
         />
         <StatusBar stats={stats} photoCount={photos.length} loading={loading} />
       </div>

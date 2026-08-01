@@ -160,6 +160,7 @@ pub fn list_albums() -> Result<Vec<Album>, String> {
 }
 
 /// Insert or update a photo record. Returns the photo with id.
+#[allow(dead_code)]
 pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
     let mut photo = photo.clone();
     with_db(|conn| {

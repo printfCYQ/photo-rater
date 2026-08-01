@@ -100,6 +100,7 @@ pub struct ScanResult {
 
 /// Progress event for batch operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ProgressEvent {
     pub current: usize,
     pub total: usize,
