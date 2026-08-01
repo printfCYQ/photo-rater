@@ -140,11 +140,34 @@ pnpm dev
 
 ### 构建发布
 
+### 桌面应用（当前开发平台）
+
 ```bash
 pnpm tauri build
 ```
 
-生成的安装包在 `src-tauri/target/release/bundle/` 下。
+生成的安装包在 `src-tauri/target/release/bundle/` 下：
+
+- macOS：`.app` + `.dmg`
+- Linux：`.deb` / `.AppImage`
+
+### Windows 安装包（GitHub Actions 自动构建）
+
+> ⚠️ Tauri 的 Windows 安装包（`.msi` / `.exe`）打包依赖 WiX / NSIS，只能在 Windows 上执行，macOS / Linux 无法直接产出。
+> 本项目已配置 GitHub Actions，在云端 Windows runner 上自动构建，无需本地 Windows 环境。
+
+触发方式（二选一）：
+
+1. **打 tag 推送** —— 自动构建并发布到 GitHub Release：
+   ```bash
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+2. **手动触发** —— 仓库 Actions 页面点击 `Build Windows` → `Run workflow`，产物在 Artifacts 下载。
+
+构建配置见 `.github/workflows/build-windows.yml`（Node 22 + pnpm 9 + Rust stable，`rust-cache` 加速；runner 已预装 WiX / NSIS / WebView2，无需额外配置）。
+
+> 注意：当前安装包未做代码签名，首次在用户机器运行可能被 Windows SmartScreen 拦截并提示"未知发布者"。正式分发前需在 M4 阶段配置代码签名证书。
 
 ## Tauri Commands (后端 API)
 
@@ -182,8 +205,8 @@ pnpm tauri build
 
 | 数据 | 路径 |
 |------|------|
-| SQLite 数据库 | `~/Library/Application Support/photo-rater/photo_rater.db` (macOS) |
-| 缩略图缓存 | `~/Library/Caches/com.photorater.desktop/thumbs/` (macOS) |
+| SQLite 数据库 | macOS: `~/Library/Application Support/photo-rater/photo_rater.db`<br>Windows: `%APPDATA%\photo-rater\photo_rater.db` |
+| 缩略图缓存 | macOS: `~/Library/Caches/com.photorater.desktop/thumbs/`<br>Windows: `%LOCALAPPDATA%\com.photorater.desktop\thumbs\` |
 
 ## 开发路线
 
