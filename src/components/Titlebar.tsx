@@ -3,12 +3,12 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export function Titlebar() {
   const appWindow = getCurrentWindow();
-  const [maximized, setMaximized] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
-    appWindow.isMaximized().then(setMaximized);
+    appWindow.isFullscreen().then(setFullscreen);
     const unlisten = appWindow.onResized(() => {
-      appWindow.isMaximized().then(setMaximized);
+      appWindow.isFullscreen().then(setFullscreen);
     });
     return () => {
       unlisten.then((fn) => fn());
@@ -17,12 +17,15 @@ export function Titlebar() {
 
   const handleClose = () => appWindow.close();
   const handleMinimize = () => appWindow.minimize();
-  const handleToggleMaximize = () => appWindow.toggleMaximize();
+  const handleToggleFullscreen = () => appWindow.setFullscreen(!fullscreen);
 
   // macOS standard: double-click titlebar to maximize/restore
   const handleDoubleClick = () => {
     appWindow.toggleMaximize();
   };
+
+  // Hide custom titlebar during macOS native fullscreen — system provides its own
+  if (fullscreen) return null;
 
   return (
     <div
@@ -53,12 +56,12 @@ export function Titlebar() {
           </svg>
         </button>
         <button
-          onClick={handleToggleMaximize}
+          onClick={handleToggleFullscreen}
           className="traffic-light traffic-light-maximize"
-          aria-label={maximized ? "退出全屏" : "全屏"}
+          aria-label={fullscreen ? "退出全屏" : "全屏"}
         >
           <svg width="6" height="6" viewBox="0 0 6 6" className="traffic-light-icon" style={{ pointerEvents: "none" }}>
-            {maximized ? (
+            {fullscreen ? (
               <>
                 <rect x="0.8" y="2" width="3" height="3" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
                 <rect x="2.2" y="0.8" width="3" height="3" rx="0.5" fill="var(--traffic-bg, #28CA41)" stroke="currentColor" strokeWidth="1.2" />
