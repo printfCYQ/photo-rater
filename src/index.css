@@ -1,0 +1,245 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================================================================
+   Photo Rater — Base Styles
+   Sophisticated dark theme, photos are the hero.
+   ================================================================ */
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    @apply bg-base text-base-50 font-sans antialiased;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button {
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+    outline-style: solid;
+  }
+
+  select {
+    font-family: inherit;
+  }
+}
+
+@layer components {
+  /* Glass-effect surface for toolbars/panels */
+  .glass-surface {
+    @apply bg-surface/90 backdrop-blur-xl border-b border-base-800/60;
+  }
+
+  /* Button base */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium
+           transition-all duration-150 ease-out
+           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
+           disabled:opacity-35 disabled:cursor-not-allowed
+           active:scale-[0.97];
+  }
+
+  /* Primary CTA button */
+  .btn-primary {
+    @apply btn bg-accent text-white shadow-lg shadow-accent/20
+           hover:shadow-xl hover:shadow-accent/30 hover:-translate-y-px;
+  }
+
+  /* Secondary / ghost button */
+  .btn-secondary {
+    @apply btn bg-surface-raised border border-base-700/60 text-base-200
+           hover:bg-surface-overlay hover:border-base-600/60
+           hover:text-base-50;
+  }
+
+  /* Section label */
+  .section-label {
+    @apply text-2xs font-bold uppercase tracking-[1.5px] text-base-500;
+  }
+
+  /* Ambient corner glows */
+  .ambient-glow-tl {
+    @apply fixed -top-[200px] -left-[200px] w-[600px] h-[600px]
+           rounded-full pointer-events-none z-0;
+    background: radial-gradient(circle, rgba(8,151,168,0.04) 0%, transparent 60%);
+  }
+
+  .ambient-glow-br {
+    @apply fixed -bottom-[300px] -right-[200px] w-[700px] h-[700px]
+           rounded-full pointer-events-none z-0;
+    background: radial-gradient(circle, rgba(244,63,94,0.025) 0%, transparent 60%);
+  }
+
+  /* Progress bar */
+  .progress-track {
+    @apply h-1.5 bg-base-800/60 rounded-full overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full relative overflow-hidden;
+    background: linear-gradient(90deg, theme('colors.accent.DEFAULT'), theme('colors.accent.light'));
+  }
+
+  .progress-fill::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    animation: shimmer 2s infinite;
+  }
+
+  /* Scrollbar styling */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.base.700') transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-base-700 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-base-600;
+  }
+
+  /* Spinner */
+  .spinner {
+    @apply w-9 h-9 rounded-full border-[2.5px] border-base-700;
+    border-top-color: theme('colors.accent.DEFAULT');
+    animation: spin 0.7s linear infinite;
+  }
+
+  /* Lightbox toolbar button */
+  .lb-tool-btn {
+    @apply w-[34px] h-[34px] rounded-md flex items-center justify-center
+           text-base-400 transition-all duration-150
+           hover:bg-surface-raised hover:text-accent
+           active:scale-[0.92];
+  }
+
+  /* Score badge pill */
+  .score-pill {
+    @apply text-xs px-2.5 py-1 rounded-full
+           bg-surface-raised border border-base-700/60 text-base-400;
+  }
+
+  /* Keyboard shortcut key */
+  .kbd {
+    @apply inline-flex items-center justify-center px-1.5 py-0.5
+           rounded-sm bg-surface-raised border border-base-700/60
+           text-[10px] font-mono text-base-400;
+    min-width: 18px;
+  }
+
+  /* Lightbox zoom wrapper */
+  .lightbox-zoom-wrapper {
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: grab;
+  }
+
+  .lightbox-zoom-wrapper:active {
+    cursor: grabbing;
+  }
+
+  .lightbox-zoom-content {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* Lightbox prev/next navigation buttons */
+  .lb-nav-btn {
+    position: absolute;
+    width: 46px;
+    height: 46px;
+    border-radius: 9999px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    top: 50%;
+    transform: translateY(-50%);
+    /* Visual */
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #fff;
+    transition: all 200ms ease;
+  }
+
+  .lb-nav-btn:hover:not(:disabled) {
+    background: theme('colors.accent.DEFAULT');
+    border-color: theme('colors.accent.light');
+    box-shadow: 0 4px 20px rgba(8, 151, 168, 0.3);
+    transform: translateY(-50%) scale(1.1);
+  }
+
+  .lb-nav-btn:active:not(:disabled) {
+    transform: translateY(-50%) scale(0.95);
+  }
+
+  .lb-nav-btn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+  }
+
+  .lb-nav-btn.prev {
+    left: 16px;
+  }
+
+  .lb-nav-btn.next {
+    right: 16px;
+  }
+
+  .lightbox-image-area {
+    position: relative;
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}

@@ -40,11 +40,24 @@ export function Toolbar({
   ];
 
   return (
-    <div className="toolbar">
-      <div className="toolbar-group">
-        <label className="toolbar-label">排序</label>
+    <div className="h-14 glass-surface flex items-center px-4 gap-4 flex-shrink-0 relative z-20">
+      {/* Sort Group */}
+      <div className="flex items-center gap-2">
+        <span className="text-2xs font-semibold uppercase tracking-[0.8px] text-base-500 whitespace-nowrap">
+          排序
+        </span>
         <select
-          className="select"
+          className="appearance-none bg-surface-raised border border-base-700/60 rounded-md py-1.5 pl-2.5 pr-7
+            text-[13px] text-base-100 outline-none cursor-pointer
+            hover:border-base-600/60 hover:bg-surface-overlay
+            focus:border-accent focus:shadow-[0_0_0_3px] focus:shadow-accent/20
+            transition-all duration-150 min-w-[90px]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "right 7px center",
+            backgroundSize: "12px",
+          }}
           value={sortBy}
           onChange={(e) => onSortChange(e.target.value, sortDesc)}
         >
@@ -55,21 +68,39 @@ export function Toolbar({
           ))}
         </select>
         <button
-          className="btn-icon"
+          className="w-[30px] h-[30px] rounded-md bg-surface-raised border border-base-700/60
+            flex items-center justify-center text-sm text-base-400
+            hover:bg-surface-overlay hover:border-base-600/60 hover:text-base-200
+            active:scale-95 transition-all duration-150"
           onClick={() => onSortChange(sortBy, !sortDesc)}
           title={sortDesc ? "降序" : "升序"}
         >
-          {sortDesc ? "↓" : "↑"}
+          {sortDesc ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          )}
         </button>
       </div>
 
-      <div className="toolbar-group">
-        <label className="toolbar-label">筛选</label>
-        <div className="filter-chips">
+      {/* Filter Chips */}
+      <div className="flex items-center gap-2">
+        <span className="text-2xs font-semibold uppercase tracking-[0.8px] text-base-500 whitespace-nowrap">
+          筛选
+        </span>
+        <div className="flex gap-0.5 bg-surface-raised rounded-lg p-0.5 border border-base-700/60">
           {statusOptions.map((opt) => (
             <button
               key={opt.label}
-              className={`chip ${statusFilter === opt.value ? "active" : ""}`}
+              className={`px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all duration-150
+                ${statusFilter === opt.value
+                  ? 'bg-accent text-white font-semibold shadow-sm shadow-accent/25'
+                  : 'text-base-400 hover:text-base-100'
+                }`}
               onClick={() => onStatusFilterChange(opt.value)}
             >
               {opt.label}
@@ -78,12 +109,13 @@ export function Toolbar({
         </div>
       </div>
 
-      <div className="toolbar-spacer" />
+      <div className="flex-1" />
 
-      <div className="toolbar-group">
+      {/* Actions */}
+      <div className="flex items-center gap-2">
         {scoring ? (
-          <div className="scoring-progress">
-            <div className="progress-bar">
+          <div className="flex items-center gap-2.5 px-1">
+            <div className="w-[140px] progress-track">
               <div
                 className="progress-fill"
                 style={{
@@ -95,26 +127,36 @@ export function Toolbar({
                 }}
               />
             </div>
-            <span className="progress-text">
-              评分中 {scoreProgress.current}/{scoreProgress.total}
+            <span className="text-xs text-base-400 whitespace-nowrap tabular-nums">
+              {scoreProgress.current}/{scoreProgress.total}
             </span>
           </div>
         ) : (
-          <button
-            className="btn-secondary"
-            onClick={onBatchScore}
-            disabled={photoCount === 0}
-          >
-            ⚡ 批量评分
-          </button>
+          <>
+            <button
+              className="btn-secondary text-[13px] py-1.5 px-3.5"
+              onClick={onBatchScore}
+              disabled={photoCount === 0}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              批量评分
+            </button>
+            <button
+              className="btn-secondary text-[13px] py-1.5 px-3.5"
+              onClick={onExport}
+              disabled={photoCount === 0}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              导出精选
+            </button>
+          </>
         )}
-        <button
-          className="btn-secondary"
-          onClick={onExport}
-          disabled={photoCount === 0}
-        >
-          📤 导出精选
-        </button>
       </div>
     </div>
   );

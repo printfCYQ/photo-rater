@@ -17,7 +17,7 @@ import { Toolbar } from "./Toolbar";
 import { PhotoGrid } from "./PhotoGrid";
 import { Lightbox } from "./Lightbox";
 import { StatusBar } from "./StatusBar";
-import "../App.css";
+import "../index.css";
 
 export function App() {
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -203,7 +203,11 @@ export function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className="flex h-screen w-screen bg-base relative">
+      {/* Ambient accent glows */}
+      <div className="ambient-glow-tl" />
+      <div className="ambient-glow-br" />
+
       <Sidebar
         albums={albums}
         selectedAlbumId={selectedAlbumId}
@@ -212,7 +216,7 @@ export function App() {
         onDeleteAlbum={handleDeleteAlbum}
         stats={stats}
       />
-      <div className="main-content">
+      <div className="flex-1 flex flex-col overflow-hidden relative z-[1]">
         <Toolbar
           sortBy={sortBy}
           sortDesc={sortDesc}
