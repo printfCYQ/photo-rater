@@ -1,4 +1,5 @@
-import { memo, useEffect, useRef, useState } from "react";
+import React, { memo, useEffect, useState, useCallback, useMemo, forwardRef } from "react";
+import { VirtuosoGrid } from "react-virtuoso";
 import type { Photo } from "../types";
 import { getThumbnailUrl, getCachedThumbnailUrls } from "../api";
 
@@ -10,8 +11,13 @@ interface PhotoGridProps {
   thumbSize: number;
 }
 
-// Shared cache: photo.path -> thumbnail URL (avoids redundant IPC calls)
+// Shared cache: photo.path -> thumbnail URL
 const thumbUrlCache = new Map<string, string>();
+
+const GRID_GAP = 12;
+const GRID_PADDING = 14;
+const ITEM_MIN_WIDTH = 240;
+const ITEM_HEIGHT = 260;
 
 function PhotoGridInner({
   photos,
@@ -20,9 +26,9 @@ function PhotoGridInner({
   onPhotoClick,
   thumbSize,
 }: PhotoGridProps) {
-  const [batchVersion, setBatchVersion] = useState(0);
+  const [, setBatchVersion] = useState(0);
 
-  // Batch-preload cached thumbnails when photo list changes.
+  // Batch-preload cached thumbnails when photo list changes
   useEffect(() => {
     if (photos.length === 0) return;
 
@@ -52,9 +58,67 @@ function PhotoGridInner({
     };
   }, [photos, thumbSize]);
 
+  // Grid components — CSS Grid auto-fill handles column count natively.
+  // Never recreated (stable references) so Virtuoso does not remount.
+  const gridComponents = useMemo(
+    () => ({
+      List: forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+        function GridList({ style, children, ...props }, ref) {
+          return (
+            <div
+              ref={ref}
+              {...props}
+              style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(auto-fill, minmax(${ITEM_MIN_WIDTH}px, 1fr))`,
+                gap: `${GRID_GAP}px`,
+                paddingTop: `${GRID_PADDING}px`,
+                paddingRight: `${GRID_PADDING}px`,
+                paddingBottom: `${GRID_PADDING}px`,
+                paddingLeft: `${GRID_PADDING}px`,
+                ...style,
+              }}
+            >
+              {children}
+            </div>
+          );
+        }
+      ),
+      Item: ({ children, ...props }: any) => (
+        <div
+          {...props}
+          style={{
+            height: `${ITEM_HEIGHT}px`,
+          }}
+        >
+          {children}
+        </div>
+      ),
+    }),
+    []
+  );
+
+  const itemContent = useCallback(
+    (index: number) => (
+      <VirtualPhotoCell
+        photo={photos[index]}
+        index={index}
+        onRate={onRate}
+        onClick={() => onPhotoClick(index)}
+        thumbSize={thumbSize}
+      />
+    ),
+    [photos, onRate, onPhotoClick, thumbSize]
+  );
+
+  const computeItemKey = useCallback(
+    (index: number) => photos[index]?.path ?? index,
+    [photos]
+  );
+
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-base overflow-hidden">
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-base">
         <div className="spinner" />
         <p className="text-sm text-base-500 font-medium">扫描照片中...</p>
       </div>
@@ -63,7 +127,7 @@ function PhotoGridInner({
 
   if (photos.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-base overflow-hidden">
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-base">
         <div className="w-[72px] h-[72px] rounded-xl bg-surface-alt border border-base-800/60 flex items-center justify-center text-base-500 mb-1">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -77,95 +141,53 @@ function PhotoGridInner({
     );
   }
 
-  // batchVersion is used to trigger re-render when batch cache loads
-  void batchVersion;
-
   return (
-    <div className="flex-1 bg-base overflow-hidden">
-      <div className="h-full overflow-y-auto p-3.5 custom-scrollbar">
-        <div className="grid gap-3"
-          style={{
-            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-            gridAutoRows: "260px",
-          }}
-        >
-          {photos.map((photo, index) => (
-            <PhotoCell
-              key={photo.path}
-              photo={photo}
-              onRate={onRate}
-              onClick={() => onPhotoClick(index)}
-              thumbSize={thumbSize}
-            />
-          ))}
-        </div>
-      </div>
+    <div className="flex-1 bg-base">
+      <VirtuosoGrid
+        className="h-full custom-scrollbar"
+        totalCount={photos.length}
+        itemContent={itemContent}
+        components={gridComponents}
+        computeItemKey={computeItemKey}
+        overscan={200}
+        increaseViewportBy={{ top: 200, bottom: 200 }}
+      />
     </div>
   );
 }
 
-interface PhotoCellProps {
+// ─── Virtual PhotoCell ───
+
+interface VirtualPhotoCellProps {
   photo: Photo;
+  index: number;
   onRate: (photo: Photo, rating: number | null, status: string) => void;
   onClick: () => void;
   thumbSize: number;
 }
 
-const PhotoCell = memo(function PhotoCell({
+const VirtualPhotoCell = memo(function VirtualPhotoCell({
   photo,
   onRate,
   onClick,
   thumbSize,
-}: PhotoCellProps) {
+}: VirtualPhotoCellProps) {
   const [thumb, setThumb] = useState<string>(
     () => thumbUrlCache.get(photo.path) || ""
   );
-  const [loaded, setLoaded] = useState(false);
-  const [visible, setVisible] = useState(false);
-  const cellRef = useRef<HTMLDivElement>(null);
+  const [loaded, setLoaded] = useState(!!thumb);
 
-  // Intersection Observer
-  useEffect(() => {
-    const cached = thumbUrlCache.get(photo.path);
-    if (cached) {
-      setThumb(cached);
-      setLoaded(true);
-      setVisible(true);
-      return;
-    }
-
-    const el = cellRef.current;
-    if (!el) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "300px" }
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [photo.path]);
-
-  // Periodically check if batch preload populated the cache
+  // Load thumbnail on mount
   useEffect(() => {
     if (thumb) return;
 
     const cached = thumbUrlCache.get(photo.path);
     if (cached) {
       setThumb(cached);
-      setLoaded(true);
       return;
     }
 
-    if (!visible) return;
-
     let cancelled = false;
-    setLoaded(false);
 
     getThumbnailUrl(photo.path, thumbSize).then((url) => {
       if (!cancelled) {
@@ -177,7 +199,13 @@ const PhotoCell = memo(function PhotoCell({
     return () => {
       cancelled = true;
     };
-  }, [visible, photo.path, thumbSize, thumb]);
+  }, [photo.path, thumbSize, thumb]);
+
+  useEffect(() => {
+    if (thumb && !loaded) {
+      setLoaded(true);
+    }
+  }, [thumb, loaded]);
 
   const isKeep = photo.status === "keep";
   const isReject = photo.status === "reject";
@@ -195,7 +223,6 @@ const PhotoCell = memo(function PhotoCell({
         }
         ${!isReject ? 'hover:-translate-y-[3px] hover:shadow-card-hover' : ''}
       `}
-      ref={cellRef}
       onClick={onClick}
     >
       {/* Thumbnail */}
@@ -207,7 +234,6 @@ const PhotoCell = memo(function PhotoCell({
           <img
             src={thumb}
             alt={photo.file_name}
-            loading="lazy"
             className={`w-full h-full object-cover transition-transform duration-[400ms] ease-out
               ${!isReject ? 'group-hover:scale-[1.06]' : ''}`}
             onLoad={() => setLoaded(true)}
@@ -216,7 +242,7 @@ const PhotoCell = memo(function PhotoCell({
         )}
       </div>
 
-      {/* Bottom Overlay — visible on hover or when scored */}
+      {/* Bottom Overlay */}
       <div className={`absolute bottom-0 left-0 right-0 px-2.5 py-2
         flex items-center justify-between gap-2
         bg-gradient-to-t from-black/85 to-transparent
@@ -234,7 +260,7 @@ const PhotoCell = memo(function PhotoCell({
         )}
       </div>
 
-      {/* Action buttons — top right, visible on hover */}
+      {/* Action buttons */}
       <div className="absolute top-2 right-2 flex gap-1.5
         opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         <button
@@ -276,7 +302,7 @@ const PhotoCell = memo(function PhotoCell({
         </button>
       </div>
 
-      {/* User rating stars — top left */}
+      {/* User rating stars */}
       {photo.user_rating !== null && photo.user_rating > 0 && (
         <div className="absolute top-2 left-2 text-[13px] text-warning tracking-[1px] pointer-events-none"
           style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>
