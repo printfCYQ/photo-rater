@@ -1,0 +1,74 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Background gradient: deep navy to dark blue (matches app dark theme) -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0f3460"/>
+    </linearGradient>
+    <!-- Gold gradient for camera body -->
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD700"/>
+      <stop offset="50%" stop-color="#FFC107"/>
+      <stop offset="100%" stop-color="#FFA000"/>
+    </linearGradient>
+    <!-- Photo card gradient (dark, on-theme) -->
+    <linearGradient id="photo" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#16213e"/>
+      <stop offset="100%" stop-color="#0a1628"/>
+    </linearGradient>
+    <!-- Subtle glow -->
+    <radialGradient id="glow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#FFD700" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#FFD700" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="225" ry="225" fill="url(#bg)"/>
+  <circle cx="512" cy="460" r="360" fill="url(#glow)"/>
+
+  <!-- ===== Camera body (centered, slightly up) ===== -->
+  <g transform="translate(512, 430)">
+    <!-- Camera body -->
+    <rect x="-240" y="-120" width="480" height="300" rx="48" ry="48"
+          fill="none" stroke="url(#gold)" stroke-width="20"/>
+    <!-- Top hump (viewfinder) -->
+    <path d="M -90,-120 L -60,-185 L 60,-185 L 90,-120 Z"
+          fill="none" stroke="url(#gold)" stroke-width="20" stroke-linejoin="round"/>
+    <!-- Lens (concentric circles) -->
+    <circle cx="0" cy="30" r="95" fill="none" stroke="url(#gold)" stroke-width="20"/>
+    <circle cx="0" cy="30" r="55" fill="none" stroke="url(#gold)" stroke-width="14"/>
+    <circle cx="0" cy="30" r="22" fill="url(#gold)"/>
+    <!-- Shutter button (top-right) -->
+    <circle cx="160" cy="-150" r="22" fill="url(#gold)"/>
+    <!-- Small flash dot -->
+    <circle cx="-160" cy="-150" r="10" fill="url(#gold)" opacity="0.7"/>
+  </g>
+
+  <!-- ===== Small photo card (bottom-right) ===== -->
+  <g transform="translate(700, 720) rotate(8)">
+    <rect x="-90" y="-110" width="180" height="220" rx="14" ry="14"
+          fill="url(#photo)" stroke="url(#gold)" stroke-width="6"/>
+    <!-- Photo content: simple mountain + sun (gold tones, on-theme) -->
+    <line x1="-90" y1="40" x2="90" y2="40" stroke="url(#gold)" stroke-width="2" opacity="0.4"/>
+    <circle cx="35" cy="-45" r="20" fill="url(#gold)" opacity="0.85"/>
+    <path d="M -90,60 L -30,-10 L 10,30 L 45,-20 L 90,50 L 90,110 L -90,110 Z"
+          fill="url(#gold)" opacity="0.5"/>
+  </g>
+
+  <!-- ===== Rating star (top-left, small, subtle) ===== -->
+  <g transform="translate(300, 720) rotate(-6)">
+    <polygon points="
+      0,-55
+      16,-17
+      56,-17
+      23,7
+      36,46
+      0,22
+      -36,46
+      -23,7
+      -56,-17
+      -16,-17
+    " fill="url(#gold)" opacity="0.85"/>
+  </g>
+</svg>
