@@ -11,6 +11,7 @@ interface ToolbarProps {
   photoCount: number;
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
+  onOpenSettings: () => void;
 }
 
 export function Toolbar({
@@ -26,6 +27,7 @@ export function Toolbar({
   photoCount,
   sidebarCollapsed,
   onToggleSidebar,
+  onOpenSettings,
 }: ToolbarProps) {
   const sortOptions = [
     { value: "composite_score", label: "综合分" },
@@ -193,7 +195,7 @@ export function Toolbar({
                 <div className="space-y-2">
                   {/* Sharpness */}
                   <div className="flex items-start gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-accent shadow-[0_0_6px_rgba(8,151,168,0.5)]" />
+                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-accent shadow-[0_0_6px_hsl(var(--accent)/0.5)]" />
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-base-100">清晰度 (28%)</div>
                       <div className="text-[11px] text-base-300 leading-relaxed">Laplacian 方差 + 多尺度频域分析，检测图像锐度和高��细节</div>
@@ -256,6 +258,19 @@ export function Toolbar({
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
               导出精选
+            </button>
+            <button
+              className="w-[34px] h-[34px] rounded-lg flex items-center justify-center
+                text-base-400 hover:text-base-200 hover:bg-surface-alt border border-transparent
+                hover:border-base-700/60 transition-all duration-150 flex-shrink-0"
+              onClick={onOpenSettings}
+              title="设置"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
             </button>
           </>
         )}

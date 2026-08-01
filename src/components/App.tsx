@@ -20,6 +20,8 @@ import { PhotoGrid, thumbUrlCache } from "./PhotoGrid";
 import { Lightbox } from "./Lightbox";
 import { StatusBar } from "./StatusBar";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { Settings } from "./Settings";
+import { SettingsProvider } from "../contexts/SettingsContext";
 import "../index.css";
 
 export function App() {
@@ -41,6 +43,7 @@ export function App() {
   } | null>(null);
   const [deleteClearCache, setDeleteClearCache] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Load albums on mount
   useEffect(() => {
@@ -238,7 +241,8 @@ export function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-base relative overflow-hidden">
+    <SettingsProvider>
+      <div className="flex flex-col h-screen w-screen bg-base relative overflow-hidden">
       {/* Ambient accent glows */}
       <div className="ambient-glow-tl" />
       <div className="ambient-glow-br" />
@@ -273,6 +277,7 @@ export function App() {
           photoCount={photos.length}
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
         <PhotoGrid
           photos={photos}
@@ -332,6 +337,10 @@ export function App() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteConfirm(null)}
       />
+
+      {/* Settings panel */}
+      <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
+    </SettingsProvider>
   );
 }

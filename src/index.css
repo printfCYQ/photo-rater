@@ -7,11 +7,33 @@
    Sophisticated dark theme, photos are the hero.
    ================================================================ */
 
+/* ---- Dynamic theme variables (driven by SettingsContext) ---- */
+:root {
+  --font-size-base: 16px;
+  --accent: 189 80% 35%;
+  --accent-light: 189 80% 43%;
+  --accent-muted: 189 80% 35% / 0.15;
+  --accent-glow: 189 80% 35% / 0.28;
+  --accent-50: 189 94% 94%;
+  --accent-100: 189 94% 88%;
+  --accent-200: 189 94% 78%;
+  --accent-300: 189 94% 62%;
+  --accent-400: 189 94% 48%;
+  --accent-500: 189 94% 40%;
+  --accent-600: 189 94% 32%;
+  --accent-700: 189 94% 24%;
+  --accent-800: 189 94% 18%;
+  --accent-900: 189 94% 14%;
+  --accent-950: 189 94% 8%;
+}
+
 @layer base {
   * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   html, body, #root {
@@ -19,11 +41,11 @@
     width: 100%;
     overflow: hidden;
     border-radius: 10px;
+    font-size: var(--font-size-base);
   }
 
   body {
     @apply bg-base text-base-50 font-sans antialiased;
-    font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -43,8 +65,8 @@
   button:focus-visible,
   select:focus-visible,
   [tabindex]:focus-visible {
-    @apply outline-2 outline-offset-2 outline-accent;
-    outline-style: solid;
+    outline: 2px solid hsl(var(--accent) / 1);
+    outline-offset: 2px;
   }
 
   select {
@@ -62,15 +84,24 @@
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium
            transition-all duration-150 ease-out
-           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
            disabled:opacity-35 disabled:cursor-not-allowed
            active:scale-[0.97];
+  }
+  .btn:focus-visible {
+    outline: 2px solid hsl(var(--accent) / 1);
+    outline-offset: 2px;
   }
 
   /* Primary CTA button */
   .btn-primary {
-    @apply btn bg-accent text-white shadow-lg shadow-accent/20
-           hover:shadow-xl hover:shadow-accent/30 hover:-translate-y-px;
+    @apply btn text-white shadow-lg hover:shadow-xl hover:-translate-y-px;
+    background-color: hsl(var(--accent) / var(--tw-bg-opacity, 1));
+    --tw-shadow-color: hsl(var(--accent) / 0.2);
+    --tw-shadow: var(--tw-shadow-colored);
+  }
+  .btn-primary:hover {
+    --tw-shadow-color: hsl(var(--accent) / 0.3);
+    --tw-shadow: var(--tw-shadow-colored);
   }
 
   /* Secondary / ghost button */
@@ -89,7 +120,7 @@
   .ambient-glow-tl {
     @apply fixed -top-[200px] -left-[200px] w-[600px] h-[600px]
            rounded-full pointer-events-none z-0;
-    background: radial-gradient(circle, rgba(8,151,168,0.04) 0%, transparent 60%);
+    background: radial-gradient(circle, hsl(var(--accent) / 0.04) 0%, transparent 60%);
   }
 
   .ambient-glow-br {
@@ -248,7 +279,7 @@
   .lb-nav-btn:hover:not(:disabled) {
     background: theme('colors.accent.DEFAULT');
     border-color: theme('colors.accent.light');
-    box-shadow: 0 4px 20px rgba(8, 151, 168, 0.3);
+    box-shadow: 0 4px 20px hsl(var(--accent) / 0.3);
     transform: translateY(-50%) scale(1.1);
   }
 
