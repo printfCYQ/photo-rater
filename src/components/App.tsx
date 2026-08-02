@@ -22,6 +22,7 @@ import { Lightbox } from "./Lightbox";
 import { StatusBar } from "./StatusBar";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Settings } from "./Settings";
+import { ToastContainer, type ToastItem, type ToastType } from "./Toast";
 import { SettingsProvider } from "../contexts/SettingsContext";
 import "../index.css";
 
@@ -48,6 +49,15 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [nimaLoaded, setNimaLoaded] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const showToast = (message: string, type: ToastType = "error") => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   // Load albums + check NIMA status on mount
   useEffect(() => {
@@ -136,7 +146,7 @@ export function App() {
       setSelectedAlbumId(result.album_id);
     } catch (e) {
       console.error("Failed to scan directory:", e);
-      alert(`扫描失败: ${e}`);
+      showToast(`扫描失败: ${e}`, "error");
     } finally {
       setLoading(false);
     }
@@ -153,7 +163,7 @@ export function App() {
       await loadStats();
     } catch (e) {
       console.error("Batch scoring failed:", e);
-      alert(`评分失败: ${e}`);
+      showToast(`评分失败: ${e}`, "error");
     } finally {
       setScoring(false);
     }
@@ -195,7 +205,7 @@ export function App() {
       }
     } catch (e) {
       console.error("Failed to delete album:", e);
-      alert(`删除失败: ${e}`);
+      showToast(`删除失败: ${e}`, "error");
     } finally {
       setDeleteConfirm(null);
     }
@@ -206,37 +216,48 @@ export function App() {
     try {
       const removed = await clearAllCache();
       thumbUrlCache.clear();
-      alert(`已清理 ${removed} 个缓存文件`);
+      showToast(`已清理 ${removed} 个缓存文件`, "success");
     } catch (e) {
       console.error("Failed to clear cache:", e);
-      alert(`清理缓存失败: ${e}`);
+      showToast(`清理缓存失败: ${e}`, "error");
     }
   };
 
   const handleExport = async (dest: string, mode: string) => {
     const selectedPhotos = photos.filter((p) => p.status === "keep");
-    if (!selectedPhotos.length) {
-      alert("没有标记为保留的照片，请先标记后再导出。");
-      return;
-    }
     try {
       const result = await exportSelection(
         selectedPhotos.map((p) => p.path),
         dest,
         mode
       );
-      alert(
-        `导出完成：成功 ${result.success_count} 张，失败 ${result.failed_count} 张${
-          result.errors.length ? "\n" + result.errors.join("\n") : ""
-        }`
-      );
+      const detail = result.errors.length
+        ? "\n" + result.errors.join("\n")
+        : "";
+      if (result.failed_count > 0) {
+        showToast(
+          `导出完成：成功 ${result.success_count} 张，失败 ${result.failed_count} 张${detail}`,
+          "warning"
+        );
+      } else {
+        showToast(
+          `导出完成：成功 ${result.success_count} 张，失败 ${result.failed_count} 张${detail}`,
+          "success"
+        );
+      }
     } catch (e) {
       console.error("Export failed:", e);
-      alert(`导出失败: ${e}`);
+      showToast(`导出失败: ${e}`, "error");
     }
   };
 
   const handleSelectExportFolder = async () => {
+    // Warn immediately (before opening the folder dialog) if nothing is marked keep
+    const keepCount = photos.filter((p) => p.status === "keep").length;
+    if (keepCount === 0) {
+      showToast("没有标记为保留的照片，请先标记后再导出。", "warning");
+      return;
+    }
     const selected = await open({
       directory: true,
       multiple: false,
@@ -363,6 +384,9 @@ export function App() {
 
       {/* Settings panel */}
       <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
     </div>
     </SettingsProvider>
   );

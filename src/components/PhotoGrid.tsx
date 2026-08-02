@@ -333,7 +333,7 @@ const VirtualPhotoCell = memo(function VirtualPhotoCell({
       onClick={onClick}
     >
       {/* Thumbnail */}
-      <div className="w-full h-full bg-surface-overlay flex items-center justify-center overflow-hidden relative">
+      <div className="w-full h-full bg-base flex items-center justify-center overflow-hidden relative">
         {!loaded && (
           <div className="absolute inset-0 bg-gradient-to-br from-surface-overlay to-surface-alt animate-pulse-soft" />
         )}
@@ -341,8 +341,8 @@ const VirtualPhotoCell = memo(function VirtualPhotoCell({
           <img
             src={thumb}
             alt={photo.file_name}
-            className={`w-full h-full object-cover transition-transform duration-[400ms] ease-out
-              ${!isReject ? 'group-hover:scale-[1.06]' : ''}`}
+            className={`w-full h-full object-contain transition-transform duration-[400ms] ease-out
+              ${!isReject ? 'group-hover:scale-[1.04]' : ''}`}
             onLoad={() => setLoaded(true)}
             onError={() => setLoaded(true)}
           />

@@ -75,7 +75,7 @@ export function Toolbar({
   ];
 
   return (
-    <div className="h-14 glass-surface flex items-center px-4 gap-4 flex-shrink-0 relative z-20">
+    <div className="min-h-14 h-auto glass-surface flex flex-wrap items-center px-4 py-2 gap-x-4 gap-y-2 flex-shrink-0 relative z-20">
       {/* Sidebar toggle */}
       <button
         className="w-8 h-8 rounded-md flex items-center justify-center text-base-400
@@ -90,7 +90,7 @@ export function Toolbar({
       </button>
 
       {/* Sort Group */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-2xs font-semibold uppercase tracking-[0.8px] text-base-500 whitespace-nowrap">
           排序
         </span>
@@ -136,7 +136,7 @@ export function Toolbar({
       </div>
 
       {/* Filter Chips */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-2xs font-semibold uppercase tracking-[0.8px] text-base-500 whitespace-nowrap">
           筛选
         </span>
@@ -158,7 +158,7 @@ export function Toolbar({
       </div>
 
       {/* Score Threshold */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-2xs font-semibold uppercase tracking-[0.8px] text-base-500 whitespace-nowrap">
           最低分
         </span>
@@ -179,12 +179,12 @@ export function Toolbar({
         </div>
       </div>
 
-      <div className="flex-1" />
+      <div className="flex-1 min-w-[40px]" />
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 ml-auto">
         {scoring ? (
-          <div className="flex items-center gap-2.5 px-1">
+          <div className="flex flex-wrap items-center gap-2.5 px-1">
             <div className="w-[140px] progress-track">
               <div
                 className="progress-fill"
