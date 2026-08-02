@@ -1,6 +1,7 @@
 mod commands;
 mod image_proc;
 mod models;
+mod nima;
 mod scanner;
 mod scoring;
 mod storage;
@@ -28,6 +29,26 @@ pub fn run() {
                     log::error!("Failed to initialize database: {}", e);
                     e
                 })?;
+
+            // Initialize NIMA model — non-fatal if it fails (fallback to heuristics)
+            let model_path = app
+                .path()
+                .resource_dir()
+                .ok()
+                .map(|d| d.join("models/nima_mobilenet.onnx"))
+                .unwrap_or_else(|| {
+                    // Fallback: try dev path relative to the executable
+                    std::env::current_exe()
+                        .ok()
+                        .and_then(|p| p.parent().map(|p| p.join("models/nima_mobilenet.onnx")))
+                        .unwrap_or_else(|| std::path::PathBuf::from("models/nima_mobilenet.onnx"))
+                });
+
+            match nima::init_session(&model_path) {
+                Ok(()) => log::info!("NIMA model initialized from {:?}", model_path),
+                Err(e) => log::warn!("NIMA model not loaded (AI scoring disabled): {}. Heuristic-only mode.", e),
+            }
+
             log::info!("Photo Rater application started");
             Ok(())
         })
@@ -48,6 +69,7 @@ pub fn run() {
             commands::clear_all_cache,
             commands::get_scoring_weights,
             commands::set_scoring_weights,
+            commands::get_nima_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

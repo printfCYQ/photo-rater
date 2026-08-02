@@ -46,6 +46,7 @@ const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
   composition: 0.27,
   exposure: 0.15,
   noise_penalty: 0.35,
+  ai_weight: 0.5,
 };
 
 // ---------------------------------------------------------------------------

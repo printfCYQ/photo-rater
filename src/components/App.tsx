@@ -5,6 +5,7 @@ import {
   clearAllCache,
   deleteAlbum,
   exportSelection,
+  getNimaStatus,
   getStats,
   listAlbums,
   listPhotos,
@@ -46,10 +47,12 @@ export function App() {
   const [clearCacheConfirm, setClearCacheConfirm] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [nimaLoaded, setNimaLoaded] = useState(false);
 
-  // Load albums on mount
+  // Load albums + check NIMA status on mount
   useEffect(() => {
     loadAlbums();
+    getNimaStatus().then(setNimaLoaded).catch(() => setNimaLoaded(false));
   }, []);
 
   // Load photos when album or filter changes
@@ -284,6 +287,7 @@ export function App() {
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
           onOpenSettings={() => setSettingsOpen(true)}
+          nimaLoaded={nimaLoaded}
         />
         <PhotoGrid
           photos={photos}

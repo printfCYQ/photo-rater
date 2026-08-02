@@ -132,6 +132,12 @@ export interface ScoringWeights {
   composition: number;
   exposure: number;
   noise_penalty: number;
+  ai_weight: number;
+}
+
+/// Check if the NIMA AI model is loaded.
+export async function getNimaStatus(): Promise<boolean> {
+  return invoke<boolean>("get_nima_status");
 }
 
 // Event listeners

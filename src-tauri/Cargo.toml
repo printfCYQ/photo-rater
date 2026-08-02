@@ -30,6 +30,8 @@ env_logger = "0.11"
 lru = "0.12"
 dirs = "5"
 chrono = { version = "0.4", features = ["serde"] }
+ort = { version = "=2.0.0-rc.13", features = ["download-binaries"] }
+ndarray = "0.17"
 
 # Dev builds: global opt-level=1 + high codegen-units keeps compilation fast and low memory.
 # Only the JPEG decoder crates get opt-level=2 — where the real decode bottleneck lives.

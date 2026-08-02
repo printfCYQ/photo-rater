@@ -1,5 +1,6 @@
 use crate::image_proc;
 use crate::models::{Album, AiScore, ExportResult, Photo, PhotoFilter, ScanResult};
+use crate::nima;
 use crate::scoring::{self, ScoringWeights};
 use crate::scanner;
 use crate::storage;
@@ -116,16 +117,33 @@ pub fn rate_photo(path: String, rating: Option<i32>, status: String) -> Result<b
     storage::update_rating(&path, rating, &status)
 }
 
-/// Score a single photo using heuristics (enhanced: 6 signals).
-/// AI scoring will be added in M3b.
+/// Score a single photo using NIMA AI + heuristics.
+/// Falls back to heuristic-only if NIMA model is not loaded.
 #[tauri::command]
 pub fn score_photo_ai(path: String) -> Result<AiScore, String> {
     let signals = image_proc::calculate_heuristics(&path)?;
-    let composite = scoring::calculate_composite_score(None, &signals);
+
+    // Try NIMA inference; fall back to None if model not loaded or inference fails
+    let ai_score = if nima::is_loaded() {
+        match nima::score_image(&path) {
+            Ok(score) => {
+                log::debug!("NIMA score for {}: {:.2}", path, score);
+                Some(score)
+            }
+            Err(e) => {
+                log::warn!("NIMA inference failed for {}: {}", path, e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let composite = scoring::calculate_composite_score(ai_score, &signals);
 
     storage::update_scores(
         &path,
-        None,
+        ai_score,
         Some(signals.blur_score),
         Some(signals.exposure),
         Some(signals.fft_clarity),
@@ -137,7 +155,7 @@ pub fn score_photo_ai(path: String) -> Result<AiScore, String> {
 
     Ok(AiScore {
         path,
-        ai_score: None,
+        ai_score,
         blur_score: Some(signals.blur_score),
         exposure: Some(signals.exposure),
         fft_clarity: Some(signals.fft_clarity),
@@ -150,20 +168,44 @@ pub fn score_photo_ai(path: String) -> Result<AiScore, String> {
 }
 
 /// Batch score photos with progress events.
+/// Uses NIMA AI + heuristics when available, falls back to heuristic-only.
 #[tauri::command]
 pub async fn batch_score_ai(paths: Vec<String>, app: AppHandle) -> Result<Vec<AiScore>, String> {
     let total = paths.len();
-    let mut results = Vec::with_capacity(total);
+    let nima_loaded = nima::is_loaded();
+    if nima_loaded {
+        log::info!("Batch AI scoring: {} photos (NIMA enabled)", total);
+    } else {
+        log::info!("Batch scoring: {} photos (heuristic-only, NIMA not loaded)", total);
+    }
 
-    // Use rayon for parallel processing
+    let t_start = Instant::now();
+
+    // Use rayon for parallel processing.
+    // NIMA inference is serialized via Mutex, but image loading/preprocessing
+    // and heuristic analysis run in parallel.
     let results_vec: Vec<Result<AiScore, String>> = paths
         .par_iter()
         .map(|path| {
             let signals = image_proc::calculate_heuristics(path)?;
-            let composite = scoring::calculate_composite_score(None, &signals);
+
+            // Try NIMA inference (serialized via internal Mutex)
+            let ai_score = if nima_loaded {
+                match nima::score_image(path) {
+                    Ok(score) => Some(score),
+                    Err(e) => {
+                        log::warn!("NIMA failed for {}: {}", path, e);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            let composite = scoring::calculate_composite_score(ai_score, &signals);
             storage::update_scores(
                 path,
-                None,
+                ai_score,
                 Some(signals.blur_score),
                 Some(signals.exposure),
                 Some(signals.fft_clarity),
@@ -175,7 +217,7 @@ pub async fn batch_score_ai(paths: Vec<String>, app: AppHandle) -> Result<Vec<Ai
 
             Ok(AiScore {
                 path: path.clone(),
-                ai_score: None,
+                ai_score,
                 blur_score: Some(signals.blur_score),
                 exposure: Some(signals.exposure),
                 fft_clarity: Some(signals.fft_clarity),
@@ -188,6 +230,9 @@ pub async fn batch_score_ai(paths: Vec<String>, app: AppHandle) -> Result<Vec<Ai
         })
         .collect();
 
+    let elapsed = t_start.elapsed();
+
+    let mut results = Vec::with_capacity(total);
     for (i, result) in results_vec.into_iter().enumerate() {
         match result {
             Ok(score) => results.push(score),
@@ -218,6 +263,14 @@ pub async fn batch_score_ai(paths: Vec<String>, app: AppHandle) -> Result<Vec<Ai
             );
         }
     }
+
+    log::info!(
+        "Batch scoring completed: {} photos in {:?} ({:.1}ms/photo, NIMA={})",
+        total,
+        elapsed,
+        elapsed.as_millis() as f64 / total.max(1) as f64,
+        nima_loaded
+    );
 
     Ok(results)
 }
@@ -335,6 +388,12 @@ pub fn set_scoring_weights(weights: ScoringWeights) -> Result<ScoringWeights, St
         weights.noise_penalty
     );
     Ok(weights)
+}
+
+/// Check if the NIMA AI model is loaded and ready for inference.
+#[tauri::command]
+pub fn get_nima_status() -> bool {
+    nima::is_loaded()
 }
 
 // We need rayon's parallel iterator

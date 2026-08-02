@@ -1,223 +1,164 @@
-# Photo Rater - 照片打分筛选
+# Photo Rater
 
-一款本地优先的桌面照片打分与筛选工具。扫描文件夹导入照片，通过 AI 启发式评分 + 手动评分快速筛选，批量导出精选照片。基于 Tauri v2 + React 19 + Rust 构建。
+一款桌面端照片评分与筛选工具。导入照片文件夹，自动评分排序，人工标记保留/淘汰，导出精选集。全本地运行，隐私友好。
+
 ![Photo Rater 截图](./public/screenshoot.png)
 
 
-## 功能特性
+## 核心功能
 
-### 照片管理
-- **文件夹扫描导入**：递归扫描目录下所有图片（JPG/JPEG/PNG/HEIC/HEIF/WebP/BMP/TIFF），并行读取 EXIF 元数据（拍摄时间、尺寸）
-- **相册/项目管理**：按文件夹导入创建相册，侧边栏快速切换
-- **SQLite 本地存储**：所有照片元数据、评分、状态持久化存储，重新打开应用即时加载
+- **文件夹导入** — 选择本地文件夹，递归扫描 jpg/png/webp/bmp/tiff 等格式，按文件夹创建相册管理
+- **自动评分** — NIMA AI 美学模型 (ONNX) + 六维启发式分析（清晰度、色彩、构图、曝光、频域、噪点），混合加权得出 0-10 综合分
+- **人工筛选** — 1-5 星评分 + 保留/淘汰标记，键盘快捷键全流程操作
+- **筛选排序** — 按综合分/AI分/清晰度/评分排序，按状态和最低分阈值过滤
+- **大图查看** — Lightbox 全屏查看，支持缩放平移、键盘导航、实时评分
+- **导出精选** — 将标记为「保留」的照片批量复制到目标文件夹
+- **可调权重** — 评分维度权重和 AI 混合比例可在设置中实时调整，四项主权重自动归一化
+- **个性化** — 6 套主题色、3 档字体大小，设置本地持久化
 
-### 评分体系
-- **AI 启发式评分**：Laplacian 方差检测清晰度 + 平均亮度检测曝光，加权计算综合分（0-10）
-  - 权重：AI分 0.7 + 清晰度 0.2 + 曝光 0.1（AI 分尚未接入，当前仅用启发式信号）
-- **手动评分**：1-5 星评分 + 保留/淘汰/待定状态标记
-- **批量评分**：支持批量标记照片状态，批量 AI 评分带进度条
+## 评分系统
 
-### 筛选与排序
-- 按状态筛选（全部 / 保留 / 淘汰 / 待评分）
-- 按评分范围筛选
-- 多字段排序：综合分 / AI分 / 清晰度 / 用户评分 / 文件名 / 导入时间
-- 底部状态栏实时显示统计数据
+### 综合分计算
 
-### 图片查看器（Lightbox）
-- 基于 `react-zoom-pan-pinch` 的全功能查看器
-- 鼠标滚轮缩放、拖拽平移、双击放大
-- 旋转（R / Shift+R）、水平翻转（H）、垂直翻转（V）
-- 缩放百分比实时显示
-- 全屏模式（F）
-- 缩略图导航条（T）
-- 复位功能（0）—— 重置位置、缩放、旋转、翻转
-- 键盘左右切换照片，预加载相邻图片
-- CSS Flexbox 居中，不依赖 JS 计算位置
+```
+# 启发式分（四维加权，自动归一化）
+heuristic = sharpness × w_sharp + exposure × w_exposure + color × w_color + composition × w_composition
 
-### 导出
-- 以相册为维度，复制标记为"保留"的照片到目标目录
-- 自动处理文件名冲突（追加时间戳）
-- 支持复制或移动模式
+# 噪点惩罚倍率
+noise_factor = 1.0 - noise_level × noise_penalty
 
-### 性能优化
-- **缩略图磁盘缓存**：Triangle 滤镜快速生成，JPEG 编码写入 `~/Library/Caches/com.photorater.desktop/thumbs/`，LRU 内存缓存 2000 条 + 文件 mtime 校验
-- **Asset Protocol**：通过 Tauri Asset Protocol 直接加载磁盘文件，无需 base64 编码传输
-- **批量缓存查询**：一次 IPC 调用返回所有磁盘缓存命中路径，消除 N 次往返（重新打开相册从 N 次 IPC → 1 次）
-- **前端懒加载**：Intersection Observer 按需加载缩略图，未命中缓存才生成
-- **Rayon 并行**：EXIF 读取、缩略图生成、启发式评分计算均使用 rayon 并行处理
+# 最终综合分
+composite = (ai_norm × ai_weight + heuristic × (1 - ai_weight)) × noise_factor × 10
+```
+
+- **无 AI 模型时**：`composite = heuristic × noise_factor × 10`（纯启发式）
+- **有 AI 模型时**：按 `ai_weight` 混合 AI 分和启发式分，默认各 50%
+- 权重全部可在设置面板中调整，修改后重新评分即生效
+
+### 六维启发式信号
+
+| 信号 | 技术 | 说明 |
+|------|------|------|
+| 清晰度 | Laplacian 方差 + FFT 频域分析 | 双指标融合，区分锐度与高频细节 |
+| 色彩和谐 | 饱和度分布 + 色相多样性 | 灰蒙蒙的照片得分低 |
+| 构图 | Sobel 边缘 + 三分法对齐 | 兴趣点靠近九宫格交叉点得分高 |
+| 曝光 | 亮度偏离中间值检测 | 过曝/欠曝自动扣分 |
+| 噪点 | 平坦区域局部方差 | 高噪点照片综合分按倍率惩罚 |
+| 频域 | 多尺度梯度比率 | 补充 Laplacian，更鲁棒的清晰度评估 |
+
+### NIMA AI 模型
+
+- 使用 NIMA MobileNet ONNX 模型（约 12MB），随 App 打包分发
+- 输入 224×224 NHWC，归一化到 [-1, 1]
+- 输出 10 类 logits → softmax → 期望值（1-10 分）
+- 推理使用 `ort` crate (ONNX Runtime)，rayon 并行预处理
 
 ## 技术栈
 
-| 层 | 技术 |
-|---|---|
-| 桌面框架 | Tauri v2 (v2.5) |
-| 前端 | React 19 + TypeScript + Vite 7 |
-| 后端 | Rust (edition 2021) |
-| 图片处理 | image v0.25 (Triangle 滤镜 + JPEG 编码) |
-| 文件扫描 | walkdir + kamadak-exif (rayon 并行) |
-| 数据库 | rusqlite (SQLite, bundled) |
-| 图片查看器 | react-zoom-pan-pinch v4 |
-| 异步运行时 | tokio |
-| 并行计算 | rayon |
+| 层 | 技术 | 说明 |
+|----|------|------|
+| 框架 | Tauri v2 | 跨平台，Rust 后端，安装包小 |
+| 前端 | React 19 + TypeScript + Vite 7 | 虚拟列表网格，流畅交互 |
+| 样式 | Tailwind CSS v3 | 设计令牌系统，CSS 变量动态主题 |
+| 后端 | Rust | 图片处理、ML 推理、文件 IO |
+| 图片处理 | image 0.25 | 解码、缩放、缩略图缓存 |
+| ML 推理 | ort 2.0.0-rc.13 + ndarray 0.17 | ONNX Runtime 端侧推理 |
+| 存储 | rusqlite (SQLite) | 本地评分数据，自动迁移 |
+| 虚拟列表 | react-virtuoso | 数千张缩略图流畅滚动 |
+| 大图查看 | react-zoom-pan-pinch | Lightbox 缩放平移 |
 
 ## 项目结构
 
 ```
 photo-rater/
-├── src-tauri/                  # Rust 后端
-│   ├── Cargo.toml
-│   ├── tauri.conf.json         # Tauri 配置 (窗口、权限、Asset Protocol)
-│   ├── capabilities/
-│   │   └── default.json        # 权限配置
-│   ├── icons/                  # 应用图标
-│   └── src/
-│       ├── lib.rs              # 应用入口，命令注册
-│       ├── commands.rs         # Tauri Commands (前端可调用)
-│       ├── models.rs           # 数据模型 (Photo, Album, PhotoFilter 等)
-│       ├── scanner.rs          # 文件扫描 + EXIF 读取
-│       ├── image_proc.rs       # 缩略图生成 + 磁盘缓存 + 启发式信号
-│       ├── storage.rs          # SQLite 存储层
-│       └── scoring.rs          # 综合评分计算
-│
-├── src/                        # React 前端
-│   ├── main.tsx                # 入口
-│   ├── App.tsx                 # 主组件 (状态管理)
-│   ├── api.ts                  # Tauri API 封装
-│   ├── types.ts                # TypeScript 类型定义
-│   ├── App.css                 # 全局样式 (深色主题)
+├── src-tauri/              # Rust 后端
+│   ├── src/
+│   │   ├── lib.rs          # 应用入口，模块注册，NIMA 初始化
+│   │   ├── commands.rs     # Tauri commands (16 个命令)
+│   │   ├── scanner.rs      # 文件扫描 (walkdir + EXIF)
+│   │   ├── image_proc.rs   # 图片处理 (缩略图缓存 + 启发式信号)
+│   │   ├── scoring.rs      # 评分引擎 (综合分计算 + 权重管理)
+│   │   ├── nima.rs         # NIMA ONNX 推理
+│   │   ├── storage.rs      # SQLite 存储层
+│   │   └── models.rs       # 数据模型
+│   ├── models/
+│   │   └── nima_mobilenet.onnx  # NIMA 模型文件
+│   └── Cargo.toml
+├── src/                    # React 前端
 │   ├── components/
-│   │   ├── App.tsx             # 主布局 + 状态管理
-│   │   ├── Sidebar.tsx         # 相册列表侧边栏
-│   │   ├── Toolbar.tsx         # 工具栏 (排序/筛选/批量操作/导出)
-│   │   ├── PhotoGrid.tsx       # 照片网格 (CSS Grid + 懒加载)
-│   │   ├── Lightbox.tsx        # 全功能图片查看器
-│   │   └── StatusBar.tsx       # 底部状态栏
-│   └── mock/                   # Web 调试用 Mock 层
-│       ├── mock-data.ts        # 模拟数据 (3 相册 48 张照片)
-│       ├── tauri-core.ts       # mock invoke + convertFileSrc
-│       ├── tauri-event.ts      # mock listen / emit
-│       ├── tauri-dialog.ts     # mock open (文件选择)
-│       └── tauri-window.ts     # mock getCurrentWindow (全屏)
-│
-├── vite.config.ts              # Vite 配置 (条件化 Mock Alias)
-├── package.json
-└── tsconfig.json
+│   │   ├── App.tsx         # 主应用
+│   │   ├── Titlebar.tsx    # 自定义标题栏
+│   │   ├── Sidebar.tsx     # 相册侧边栏
+│   │   ├── Toolbar.tsx     # 工具栏 (排序/筛选/评分/导出)
+│   │   ├── PhotoGrid.tsx   # 虚拟列表照片网格
+│   │   ├── Lightbox.tsx    # 大图查看器
+│   │   ├── Settings.tsx    # 设置面板
+│   │   ├── StatusBar.tsx   # 底部状态栏
+│   │   └── ConfirmDialog.tsx
+│   ├── contexts/
+│   │   └── SettingsContext.tsx  # 全局设置 (主题/字体/评分权重)
+│   ├── api.ts              # Tauri API 封装
+│   └── types.ts            # TypeScript 类型定义
+└── package.json
 ```
 
-## 快速开始
+## 开发
 
 ### 环境要求
 
-- [Node.js](https://nodejs.org/) 18+
-- [pnpm](https://pnpm.io/) (`npm install -g pnpm`)
-- [Rust](https://www.rust-lang.org/tools/install) (stable toolchain)
-- macOS: Xcode Command Line Tools (`xcode-select --install`)
+- [Rust](https://rustup.rs/) (stable)
+- Node.js 18+
+- pnpm
+- 系统依赖：参见 [Tauri v2 前置要求](https://v2.tauri.app/start/prerequisites/)
 
-### 安装
+### 启动开发
 
 ```bash
 cd photo-rater
 pnpm install
+pnpm tauri:dev
 ```
-
-### 桌面应用开发
-
-```bash
-pnpm tauri dev
-```
-
-Tauri 会自动启动 Vite dev server 并打开桌面窗口。修改前端代码 HMR 热更新，修改 Rust 代码自动重新编译。
-
-### Web 浏览器调试
-
-无需 Rust 后端，在浏览器中调试前端 UI：
-
-```bash
-pnpm dev
-```
-
-打开 `http://localhost:1420`。Vite 会自动将 `@tauri-apps/api` 等模块 alias 到 `src/mock/` 下的 mock 实现，使用 Lorem Picsum 占位图模拟真实照片数据。
-
-> 原理：`vite.config.ts` 检测 `TAURI_DEV_HOST` 环境变量判断是否 Tauri 环境。非 Tauri 时自动启用 mock alias，`tauri dev` 时走真实 API，互不干扰。
 
 ### 构建发布
 
-### 桌面应用（当前开发平台）
-
 ```bash
-pnpm tauri build
+pnpm tauri:build
+# macOS: src-tauri/target/release/bundle/dmg/*.dmg
+# Windows: src-tauri/target/release/bundle/msi/*.msi
 ```
 
-生成的安装包在 `src-tauri/target/release/bundle/` 下：
+### 仅前端开发 (Mock 模式)
 
-- macOS：`.app` + `.dmg`
-- Linux：`.deb` / `.AppImage`
+```bash
+pnpm dev
+# 浏览器访问 http://localhost:1420
+# 使用 mock 数据，无需 Rust 后端
+```
 
-### Windows 安装包（GitHub Actions 自动构建）
-
-> ⚠️ Tauri 的 Windows 安装包（`.msi` / `.exe`）打包依赖 WiX / NSIS，只能在 Windows 上执行，macOS / Linux 无法直接产出。
-> 本项目已配置 GitHub Actions，在云端 Windows runner 上自动构建，无需本地 Windows 环境。
-
-触发方式（二选一）：
-
-1. **打 tag 推送** —— 自动构建并发布到 GitHub Release：
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
-2. **手动触发** —— 仓库 Actions 页面点击 `Build Windows` → `Run workflow`，产物在 Artifacts 下载。
-
-构建配置见 `.github/workflows/build-windows.yml`（Node 22 + pnpm 9 + Rust stable，`rust-cache` 加速；runner 已预装 WiX / NSIS / WebView2，无需额外配置）。
-
-> 注意：当前安装包未做代码签名，首次在用户机器运行可能被 Windows SmartScreen 拦截并提示"未知发布者"。正式分发前需在 M4 阶段配置代码签名证书。
-
-## Tauri Commands (后端 API)
+## Tauri Commands
 
 | 命令 | 说明 |
 |------|------|
-| `scan_directory` | 扫描目录创建相册，返回照片列表 |
-| `list_albums` | 列出所有相册 |
-| `list_photos` | 按筛选条件列出照片（相册/状态/评分范围/排序） |
-| `get_thumbnail` | 获取单张缩略图（磁盘缓存 + 按需生成） |
-| `batch_get_thumbnails` | 批量并行生成缩略图 |
-| `get_cached_thumbnail_paths` | 批量查询磁盘缓存命中路径（不生成，快速） |
-| `get_preview_image` | 获取大图预览（Lightbox 用） |
-| `rate_photo` | 更新照片评分和状态 |
-| `score_photo_ai` | 单张 AI 启发式评分 |
-| `batch_score_ai` | 批量 AI 评分（带进度事件） |
-| `export_selection` | 导出精选照片到目标目录 |
-| `get_stats` | 获取相册统计数据 |
-| `delete_album` | 删除相册及其照片记录 |
+| `scan_directory` | 扫描文件夹，创建相册，返回照片列表 |
+| `list_albums` / `delete_album` | 相册管理 |
+| `list_photos` | 按筛选条件查询照片（状态/分数/排序） |
+| `get_thumbnail` / `batch_get_thumbnails` | 缩略图生成（磁盘缓存 + Asset Protocol） |
+| `get_preview_image` | 大图预览（按需缩放） |
+| `score_photo_ai` / `batch_score_ai` | 单张/批量评分（AI + 启发式） |
+| `rate_photo` | 保存用户评分和标记 |
+| `export_selection` | 导出精选照片到目标文件夹 |
+| `get_stats` | 统计数据（总数/已评/保留/淘汰） |
+| `get_scoring_weights` / `set_scoring_weights` | 评分权重读写 |
+| `get_nima_status` | NIMA 模型加载状态 |
+| `clear_all_cache` / `get_cached_thumbnail_paths` | 缓存管理 |
 
-## 键盘快捷键 (Lightbox)
+## 设计原则
 
-| 按键 | 功能 |
-|------|------|
-| `←` / `→` | 上一张 / 下一张 |
-| `Esc` | 关闭查看器 |
-| `R` / `Shift+R` | 顺时针 / 逆时针旋转 |
-| `H` / `V` | 水平翻转 / 垂直翻转 |
-| `0` | 复位（位置、缩放、旋转、翻转全部重置） |
-| `F` | 全屏切换 |
-| `T` | 缩略图导航条切换 |
-| `1`-`5` | 设置 1-5 星评分 |
-| `K` / `X` | 标记保留 / 淘汰 |
+- **端侧优先** — 图片和模型推理全部本地完成，不上传云端
+- **性能优先** — 重活（解码、推理、IO）在 Rust 侧，前端只做交互
+- **AI 粗筛 + 人工精挑** — AI 不做终审，只做排序预筛，避免通用模型与个人审美偏差
+- **渐进增强** — 无 AI 模型时自动回退纯启发式评分，功能完整可用
 
-## 数据存储位置
+## 许可
 
-| 数据 | 路径 |
-|------|------|
-| SQLite 数据库 | macOS: `~/Library/Application Support/photo-rater/photo_rater.db`<br>Windows: `%APPDATA%\photo-rater\photo_rater.db` |
-| 缩略图缓存 | macOS: `~/Library/Caches/com.photorater.desktop/thumbs/`<br>Windows: `%LOCALAPPDATA%\com.photorater.desktop\thumbs\` |
-
-## 开发路线
-
-- [x] **M0** 项目脚手架 — Tauri v2 + React + Vite + TypeScript
-- [x] **M1** 文件扫描 + 缩略图网格 — walkdir 扫描 + EXIF 读取 + CSS Grid 展示
-- [x] **M2** 手动评分 + SQLite 存储 + 筛选导出 — 完整评分/筛选/排序/导出流程
-- [x] **M2.5** 性能优化 — Asset Protocol + 磁盘缓存 + 批量 IPC + 懒加载
-- [x] **M2.6** Lightbox 全功能查看器 — 缩放/旋转/翻转/全屏/复位/缩略图导航
-- [x] **M2.7** Web 调试环境 — Mock 层 + Vite Alias + 占位图
-- [ ] **M3** AI 预筛 — NIMA ONNX 模型评分（接入深度学习模型替代启发式信号）
-- [ ] **M4** 打磨发布 — UI 打磨、打包分发、自动更新
-
+MIT

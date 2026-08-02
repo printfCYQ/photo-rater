@@ -1,3 +1,5 @@
+import { useSettings } from "../contexts/SettingsContext";
+
 interface ToolbarProps {
   sortBy: string;
   sortDesc: boolean;
@@ -14,6 +16,7 @@ interface ToolbarProps {
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
   onOpenSettings: () => void;
+  nimaLoaded: boolean;
 }
 
 export function Toolbar({
@@ -32,7 +35,21 @@ export function Toolbar({
   sidebarCollapsed,
   onToggleSidebar,
   onOpenSettings,
+  nimaLoaded,
 }: ToolbarProps) {
+  const { settings } = useSettings();
+  const w = settings.scoringWeights;
+
+  // Normalized heuristic percentages (four main weights sum → 100%)
+  const hSum = w.sharpness + w.color + w.composition + w.exposure;
+  const norm = (v: number) => (hSum > 0 ? Math.round((v / hSum) * 100) : 0);
+  const sharpPct = norm(w.sharpness);
+  const colorPct = norm(w.color);
+  const compPct = norm(w.composition);
+  const expPct = norm(w.exposure);
+  const aiPct = Math.round(w.ai_weight * 100);
+  const heurPct = Math.round((1 - w.ai_weight) * 100);
+
   const sortOptions = [
     { value: "composite_score", label: "综合分" },
     { value: "ai_score", label: "AI 分" },
@@ -195,12 +212,10 @@ export function Toolbar({
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                 </svg>
-                批量评分
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="ml-0.5 opacity-50">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="16" x2="12" y2="12" />
-                  <line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
+                {nimaLoaded ? "AI 评分" : "批量评分"}
+                {nimaLoaded && (
+                  <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                )}
               </button>
 
               {/* Scoring Rules Tooltip */}
@@ -213,15 +228,26 @@ export function Toolbar({
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                   </svg>
                   <span className="text-[13px] font-bold text-base-50">评分规则</span>
-                  <span className="text-[10px] text-base-400 ml-auto">六维分析</span>
+                  <span className="text-[10px] text-base-400 ml-auto">
+                    {nimaLoaded ? "AI + 六维分析" : "六维分析"}
+                  </span>
                 </div>
 
                 {/* Formula */}
                 <div className="flex flex-col gap-1 p-2.5 mb-2.5 rounded-lg
                   bg-base-800/60 border border-base-700/40
                   font-mono text-[11px] leading-relaxed">
-                  <span className="text-base-300">清晰度 28% + 色彩 30% + 构图 27%</span>
-                  <span className="text-base-300">+ 曝光 15% + 噪点惩罚</span>
+                  {nimaLoaded ? (
+                    <>
+                      <span className="text-cyan-400">AI {aiPct}% + 启发式 {heurPct}%</span>
+                      <span className="text-base-300">清晰度 + 色彩 + 构图 + 曝光 + 噪点</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base-300">清晰度 {sharpPct}% + 色彩 {colorPct}% + 构图 {compPct}%</span>
+                      <span className="text-base-300">+ 曝光 {expPct}% + 噪点惩罚</span>
+                    </>
+                  )}
                   <span className="font-bold text-warning-light">→ 0 – 10 分</span>
                 </div>
 
@@ -231,8 +257,8 @@ export function Toolbar({
                   <div className="flex items-start gap-2">
                     <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-accent shadow-[0_0_6px_hsl(var(--accent)/0.5)]" />
                     <div className="min-w-0">
-                      <div className="text-xs font-semibold text-base-100">清晰度 (28%)</div>
-                      <div className="text-[11px] text-base-300 leading-relaxed">Laplacian 方差 + 多尺度频域分析，检测图像锐度和高��细节</div>
+                      <div className="text-xs font-semibold text-base-100">清晰度 ({sharpPct}%)</div>
+                      <div className="text-[11px] text-base-300 leading-relaxed">Laplacian 方差 + 多尺度频域分析，检测图像锐度和高频细节</div>
                     </div>
                   </div>
 
@@ -240,7 +266,7 @@ export function Toolbar({
                   <div className="flex items-start gap-2">
                     <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
                     <div className="min-w-0">
-                      <div className="text-xs font-semibold text-base-100">色彩和谐 (30%)</div>
+                      <div className="text-xs font-semibold text-base-100">色彩和谐 ({colorPct}%)</div>
                       <div className="text-[11px] text-base-300 leading-relaxed">饱和度分布 + 色相多样性，灰蒙蒙的照片得分低</div>
                     </div>
                   </div>
@@ -249,7 +275,7 @@ export function Toolbar({
                   <div className="flex items-start gap-2">
                     <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.5)]" />
                     <div className="min-w-0">
-                      <div className="text-xs font-semibold text-base-100">构图 (27%)</div>
+                      <div className="text-xs font-semibold text-base-100">构图 ({compPct}%)</div>
                       <div className="text-[11px] text-base-300 leading-relaxed">三分法对齐检测，兴趣点越靠近九宫格交叉点分越高</div>
                     </div>
                   </div>
@@ -258,7 +284,7 @@ export function Toolbar({
                   <div className="flex items-start gap-2">
                     <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-warning shadow-[0_0_6px_rgba(245,158,11,0.5)]" />
                     <div className="min-w-0">
-                      <div className="text-xs font-semibold text-base-100">曝光 (15%)</div>
+                      <div className="text-xs font-semibold text-base-100">曝光 ({expPct}%)</div>
                       <div className="text-[11px] text-base-300 leading-relaxed">亮度偏离中间值（128）越少越好，过曝/欠曝扣分</div>
                     </div>
                   </div>
@@ -273,11 +299,16 @@ export function Toolbar({
                   </div>
                 </div>
 
-                {/* Future */}
+                {/* AI Status */}
                 <div className="flex items-start gap-1.5 mt-3 p-2 rounded-md
                   bg-accent/10 border border-accent/15 text-[11px] text-base-300 leading-relaxed">
-                  <div className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 bg-accent-light/60" />
-                  <span>权重可在<strong className="text-accent-light font-semibold">设置</strong>中自定义调整 · 后续版本将接入 <strong className="text-accent-light font-semibold">AI NIMA 模型</strong>（权重 50%）</span>
+                  <div className={`w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 ${nimaLoaded ? "bg-emerald-400 animate-pulse" : "bg-accent-light/60"}`} />
+                  <span>
+                    {nimaLoaded
+                      ? <>NIMA AI 模型已启用，AI 与启发式混合评分。权重可在<strong className="text-accent-light font-semibold">设置</strong>中调整</>
+                      : <>权重可在<strong className="text-accent-light font-semibold">设置</strong>中自定义调整</>
+                    }
+                  </span>
                 </div>
               </div>
             </div>

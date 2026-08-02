@@ -1,6 +1,7 @@
+import { useState, useEffect } from "react";
 import type { AccentPreset, FontSize } from "../contexts/SettingsContext";
 import { useSettings } from "../contexts/SettingsContext";
-import type { ScoringWeights } from "../api";
+import { getNimaStatus, type ScoringWeights } from "../api";
 
 // ---------------------------------------------------------------------------
 // Data
@@ -26,6 +27,7 @@ const DEFAULT_WEIGHTS: ScoringWeights = {
   composition: 0.27,
   exposure: 0.15,
   noise_penalty: 0.35,
+  ai_weight: 0.5,
 };
 
 interface WeightSliderProps {
@@ -75,6 +77,14 @@ interface SettingsProps {
 export function Settings({ open, onClose }: SettingsProps) {
   const { settings, setFontSize, setAccentColor, setScoringWeights } = useSettings();
   const w = settings.scoringWeights;
+  const [nimaLoaded, setNimaLoaded] = useState(false);
+
+  // Check NIMA status when panel opens
+  useEffect(() => {
+    if (open) {
+      getNimaStatus().then(setNimaLoaded).catch(() => setNimaLoaded(false));
+    }
+  }, [open]);
 
   if (!open) return null;
 
@@ -227,6 +237,32 @@ export function Settings({ open, onClose }: SettingsProps) {
                   description="高噪点总分扣减倍率，0 = 不惩罚，1 = 最大惩罚"
                 />
               </div>
+
+              {/* AI Weight — only shown when NIMA is loaded */}
+              {nimaLoaded && (
+                <div className="space-y-4 p-3.5 rounded-lg bg-accent-muted/30 border border-accent/15 mt-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[12px] font-semibold text-emerald-400">NIMA AI 模型已加载</span>
+                  </div>
+                  <WeightSlider
+                    label="AI 评分权重"
+                    value={w.ai_weight}
+                    onChange={(v) => updateWeight("ai_weight", v)}
+                    color="#22d3ee"
+                    description={`AI 与启发式的混合比例：AI ${Math.round(w.ai_weight * 100)}% + 启发式 ${Math.round((1 - w.ai_weight) * 100)}%`}
+                  />
+                </div>
+              )}
+
+              {!nimaLoaded && (
+                <div className="flex items-center gap-2 mt-3 p-3 rounded-lg bg-surface-alt border border-base-700/40">
+                  <div className="w-1.5 h-1.5 rounded-full bg-base-500" />
+                  <span className="text-[11px] text-base-500">
+                    NIMA AI 模型未加载，当前使用纯启发式评分
+                  </span>
+                </div>
+              )}
 
               <p className="text-[11px] text-base-500 mt-2 leading-relaxed">
                 四项主权重自动归一化，右侧显示实际占比。修改后需重新「批量评分」生效。

@@ -359,12 +359,14 @@ const VirtualPhotoCell = memo(function VirtualPhotoCell({
         <span className="text-[11px] font-medium text-white/90 truncate max-w-[140px]">
           {photo.file_name}
         </span>
-        {hasScore && (
-          <span className="text-[13px] font-bold text-warning-light bg-black/60 backdrop-blur-sm
-            px-2 py-0.5 rounded-sm flex-shrink-0 tabular-nums">
-            {photo.composite_score!.toFixed(1)}
-          </span>
-        )}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {hasScore && (
+            <span className="text-[13px] font-bold text-warning-light bg-black/60 backdrop-blur-sm
+              px-2 py-0.5 rounded-sm tabular-nums" title="综合评分">
+              {photo.composite_score!.toFixed(1)}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Action buttons */}

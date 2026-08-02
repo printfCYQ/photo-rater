@@ -16,6 +16,14 @@ pub struct ScoringWeights {
     pub exposure: f64,
     /// Noise penalty strength (0 = no penalty, 1 = full penalty)
     pub noise_penalty: f64,
+    /// AI score weight (0 = pure heuristic, 1 = pure AI). Default 0.5.
+    /// Only used when NIMA model is loaded and produces a score.
+    #[serde(default = "default_ai_weight")]
+    pub ai_weight: f64,
+}
+
+fn default_ai_weight() -> f64 {
+    0.5
 }
 
 impl Default for ScoringWeights {
@@ -26,6 +34,7 @@ impl Default for ScoringWeights {
             composition: 0.27,
             exposure: 0.15,
             noise_penalty: 0.35,
+            ai_weight: 0.5,
         }
     }
 }
@@ -57,10 +66,10 @@ pub fn set_weights(w: ScoringWeights) {
 ///           * noise_factor * 10.0
 /// ```
 ///
-/// **With AI model (future):**
+/// **With AI model:**
 /// ```text
-/// composite = (ai * 0.50 + sharpness * 0.13 + exposure * 0.07 + color * 0.15 + composition * 0.10)
-///           * noise_factor * 10.0 + (1.0 - noise_level) * 0.05
+/// heuristic_score = sharpness * w_sharp + exposure * w_exposure + color * w_color + composition * w_composition (normalized)
+/// composite = (ai_norm * ai_weight + heuristic_score * (1 - ai_weight)) * noise_factor * 10.0
 /// ```
 pub fn calculate_composite_score(
     ai_score: Option<f64>,
@@ -86,27 +95,26 @@ pub fn calculate_composite_score(
     // Noise penalty: high noise reduces score
     let noise_factor = 1.0 - noise_level * w.noise_penalty;
 
-    // Normalize weights to sum to 1.0
+    // Normalize heuristic weights to sum to 1.0
     let weight_sum = w.sharpness + w.color + w.composition + w.exposure;
     let ws = if weight_sum > 0.0 { weight_sum } else { 1.0 };
 
+    // Heuristic score (normalized, 0–1)
+    let heuristic_score = sharpness * (w.sharpness / ws)
+        + exposure_norm * (w.exposure / ws)
+        + color_harmony * (w.color / ws)
+        + composition * (w.composition / ws);
+
     if let Some(ai) = ai_score {
-        // With AI: fixed blend (AI 50% + heuristics 50%)
+        // With AI: blend AI score and heuristic score using ai_weight
         let ai_norm = (ai / 10.0).clamp(0.0, 1.0);
-        let weighted = ai_norm * 0.50
-            + sharpness * (w.sharpness / ws) * 0.13
-            + exposure_norm * (w.exposure / ws) * 0.07
-            + color_harmony * (w.color / ws) * 0.15
-            + composition * (w.composition / ws) * 0.10
-            + (1.0 - noise_level) * 0.05;
+        let ai_w = w.ai_weight.clamp(0.0, 1.0);
+        let h_w = 1.0 - ai_w;
+        let weighted = ai_norm * ai_w + heuristic_score * h_w;
         Some((weighted * noise_factor).clamp(0.0, 1.0) * 10.0)
     } else {
-        // Without AI: heuristics only, using configured weights
-        let weighted = sharpness * (w.sharpness / ws)
-            + exposure_norm * (w.exposure / ws)
-            + color_harmony * (w.color / ws)
-            + composition * (w.composition / ws);
-        Some((weighted * noise_factor).clamp(0.0, 1.0) * 10.0)
+        // Without AI: heuristics only
+        Some((heuristic_score * noise_factor).clamp(0.0, 1.0) * 10.0)
     }
 }
 
