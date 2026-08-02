@@ -143,20 +143,22 @@ pnpm tauri:build
 - "来自身份不明的开发者" / "无法验证开发者"，或
 - **"已损坏，无法打开。你应该将它移到废纸篓"**
 
-这两种都是 Gatekeeper 的拦截提示，**并非安装包真的损坏**。修复（在终端执行，去掉隔离标记）：
+这两种都是 Gatekeeper 的拦截提示，**并非安装包真的损坏**。修复（在终端执行，**原样复制粘贴以下命令即可**）：
 
 ```bash
-# 若解压在"下载"文件夹
-xattr -cr ~/Downloads/Photo\ Rater.app
+# 若解压在"下载"文件夹（注意：路径含空格，必须用英文双引号包住）
+xattr -cr "/Users/mac/Downloads/Photo Rater.app"
 
 # 若已拖入"应用程序"
-sudo xattr -rd com.apple.quarantine /Applications/Photo\ Rater.app
+sudo xattr -rd com.apple.quarantine "/Applications/Photo Rater.app"
 ```
+
+> ⚠️ **注意**：`Photo Rater.app` 中间有空格，命令里**必须用双引号包住整个路径**（如上面所示），或用反斜杠转义 `Photo\ Rater.app`。如果直接写 `xattr -cr ~/Downloads/Photo Rater.app`（不加引号/转义），shell 会把 `Photo` 和 `Rater.app` 当成两个文件，报 `No such file`。
 
 清除隔离标记后即可正常打开。如仍被拦，再执行本地重签名后右键打开：
 
 ```bash
-sudo codesign --force --deep --sign - /Applications/Photo\ Rater.app
+sudo codesign --force --deep --sign - "/Applications/Photo Rater.app"
 ```
 
 > 要彻底消除此提示，需加入 Apple Developer Program（$99/年）对 app 进行签名与公证。个人/内部使用按上述步骤绕过即可。
