@@ -123,9 +123,43 @@ pnpm tauri:dev
 
 ```bash
 pnpm tauri:build
-# macOS: src-tauri/target/release/bundle/dmg/*.dmg
-# Windows: src-tauri/target/release/bundle/msi/*.msi
+# macOS:   src-tauri/target/release/bundle/macos/*.app     （zip 后分发，未走 dmg）
+# Windows: src-tauri/target/release/bundle/msi/*.msi 与 nsis/*.exe
+# Linux:   src-tauri/target/release/bundle/appimage/*.AppImage 与 deb/*.deb
 ```
+
+## 下载与安装
+
+从 GitHub Releases 下载对应平台安装包：
+
+- **macOS**：`PhotoRater-macos-vX.Y.Z.zip` → 解压得到 `Photo Rater.app`
+- **Windows**：`Photo.Rater_X.Y.Z_x64-setup.exe`（或 `.msi`）
+- **Linux**：`.AppImage` / `.deb`（如已构建）
+
+### macOS 打开方法
+
+应用**未付费签名/公证**，下载解压后首次打开可能提示：
+
+- "来自身份不明的开发者" / "无法验证开发者"，或
+- **"已损坏，无法打开。你应该将它移到废纸篓"**
+
+这两种都是 Gatekeeper 的拦截提示，**并非安装包真的损坏**。修复（在终端执行，去掉隔离标记）：
+
+```bash
+# 若解压在"下载"文件夹
+xattr -cr ~/Downloads/Photo\ Rater.app
+
+# 若已拖入"应用程序"
+sudo xattr -rd com.apple.quarantine /Applications/Photo\ Rater.app
+```
+
+清除隔离标记后即可正常打开。如仍被拦，再执行本地重签名后右键打开：
+
+```bash
+sudo codesign --force --deep --sign - /Applications/Photo\ Rater.app
+```
+
+> 要彻底消除此提示，需加入 Apple Developer Program（$99/年）对 app 进行签名与公证。个人/内部使用按上述步骤绕过即可。
 
 ### 仅前端开发 (Mock 模式)
 
