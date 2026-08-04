@@ -5,15 +5,18 @@ import {
   clearAllCache,
   deleteAlbum,
   exportSelection,
+  getLocationGroups,
   getNimaStatus,
+  getSimilarGroups,
   getStats,
+  getTimeTree,
   listAlbums,
   listPhotos,
   onBatchScoreProgress,
   ratePhoto,
   scanDirectory,
 } from "../api";
-import type { Album, Photo, PhotoStats } from "../types";
+import type { Album, LocationGroup, Photo, PhotoGroup, PhotoStats, TimeNode } from "../types";
 import { Sidebar } from "./Sidebar";
 import { Titlebar } from "./Titlebar";
 import { Toolbar } from "./Toolbar";
@@ -51,6 +54,18 @@ export function App() {
   const [nimaLoaded, setNimaLoaded] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
+  // Smart-view state machine: how photos are currently being browsed.
+  type BrowseMode = "album" | "time" | "location" | "similar";
+  const [browseMode, setBrowseMode] = useState<BrowseMode>("album");
+  const [timeRange, setTimeRange] = useState<{ from?: string; to?: string; label?: string }>({});
+  const [timeTree, setTimeTree] = useState<TimeNode[] | null>(null);
+  const [locationGroups, setLocationGroups] = useState<LocationGroup[] | null>(null);
+  const [similarGroups, setSimilarGroups] = useState<PhotoGroup[] | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+  const [computingLocation, setComputingLocation] = useState(false);
+  const [computingSimilar, setComputingSimilar] = useState(false);
+
   const showToast = (message: string, type: ToastType = "error") => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, message, type }]);
@@ -65,7 +80,7 @@ export function App() {
     getNimaStatus().then(setNimaLoaded).catch(() => setNimaLoaded(false));
   }, []);
 
-  // Load photos when album or filter changes
+  // Load photos when album, view mode, or filter changes
   useEffect(() => {
     if (selectedAlbumId !== null) {
       loadPhotos();
@@ -74,7 +89,17 @@ export function App() {
       setPhotos([]);
       setStats(null);
     }
-  }, [selectedAlbumId, sortBy, sortDesc, statusFilter, minScore]);
+  }, [
+    selectedAlbumId,
+    browseMode,
+    timeRange,
+    selectedLocationId,
+    selectedGroupId,
+    sortBy,
+    sortDesc,
+    statusFilter,
+    minScore,
+  ]);
 
   // Listen for batch score progress
   useEffect(() => {
@@ -97,17 +122,32 @@ export function App() {
   };
 
   const loadPhotos = async () => {
+    if (selectedAlbumId === null) {
+      setPhotos([]);
+      return;
+    }
     setLoading(true);
-    const label = `[perf] listPhotos IPC (album=${selectedAlbumId})`;
+    const label = `[perf] listPhotos IPC (mode=${browseMode}, album=${selectedAlbumId})`;
     console.time(label);
     try {
-      const result = await listPhotos({
-        album_id: selectedAlbumId,
-        status: statusFilter,
-        min_score: minScore,
-        sort_by: sortBy,
-        sort_desc: sortDesc,
-      });
+      let result: Photo[] = [];
+      if (browseMode === "album" || browseMode === "time") {
+        result = await listPhotos({
+          album_id: selectedAlbumId,
+          status: statusFilter,
+          min_score: minScore,
+          date_from: browseMode === "time" ? (timeRange.from ?? null) : null,
+          date_to: browseMode === "time" ? (timeRange.to ?? null) : null,
+          sort_by: sortBy,
+          sort_desc: sortDesc,
+        });
+      } else if (browseMode === "location" && locationGroups) {
+        const g = locationGroups.find((g) => g.id === selectedLocationId);
+        result = g ? g.photos : [];
+      } else if (browseMode === "similar" && similarGroups) {
+        const g = similarGroups.find((g) => g.id === selectedGroupId);
+        result = g ? g.photos : [];
+      }
       console.timeEnd(label);
       console.log(`[perf] Got ${result.length} photos`);
       setPhotos(result);
@@ -128,6 +168,35 @@ export function App() {
     }
   };
 
+  const resetView = () => {
+    setBrowseMode("album");
+    setTimeRange({});
+    setLocationGroups(null);
+    setSimilarGroups(null);
+    setSelectedLocationId(null);
+    setSelectedGroupId(null);
+  };
+
+  const loadTimeTree = async (albumId: number) => {
+    try {
+      const tree = await getTimeTree(albumId);
+      setTimeTree(tree);
+    } catch (e) {
+      console.error("Failed to load time tree:", e);
+    }
+  };
+
+  const handleSelectAlbum = (albumId: number) => {
+    if (albumId === selectedAlbumId) {
+      // Re-clicking the current album returns to its plain album view.
+      resetView();
+    } else {
+      resetView();
+      setSelectedAlbumId(albumId);
+    }
+    loadTimeTree(albumId);
+  };
+
   const handleScanDirectory = async () => {
     try {
       const selected = await open({
@@ -143,13 +212,92 @@ export function App() {
 
       const result = await scanDirectory(selected, albumName);
       await loadAlbums();
+      resetView();
       setSelectedAlbumId(result.album_id);
+      loadTimeTree(result.album_id);
     } catch (e) {
       console.error("Failed to scan directory:", e);
       showToast(`扫描失败: ${e}`, "error");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSelectTime = (from: string, to: string, label: string) => {
+    setTimeRange({ from, to, label });
+    setBrowseMode("time");
+  };
+
+  // Switch the smart-classification view via the segmented nav.
+  // Auto-triggers location/similar analysis on first open.
+  const handleSelectBrowseMode = (mode: BrowseMode) => {
+    if (selectedAlbumId === null) return;
+    setBrowseMode(mode);
+    if (mode === "location" && locationGroups === null) {
+      void handleComputeLocation();
+    } else if (mode === "similar" && similarGroups === null) {
+      void handleComputeSimilar();
+    }
+  };
+
+  const handleComputeLocation = async () => {
+    if (selectedAlbumId === null) return;
+    setComputingLocation(true);
+    try {
+      const groups = await getLocationGroups(selectedAlbumId);
+      setLocationGroups(groups);
+      const withGps = groups.filter((g) => g.lat !== null).length;
+      if (groups.length > 0) {
+        setSelectedLocationId(groups[0].id);
+        setBrowseMode("location");
+      }
+      showToast(
+        withGps > 0
+          ? `已按地点分组：${withGps} 个地点${groups.some((g) => g.lat === null) ? "，另有未知位置" : ""}`
+          : "没有带 GPS 信息的照片，无法按地点分组",
+        withGps > 0 ? "success" : "warning"
+      );
+    } catch (e) {
+      console.error("Location grouping failed:", e);
+      showToast(`地点分组失败: ${e}`, "error");
+    } finally {
+      setComputingLocation(false);
+    }
+  };
+
+  const handleSelectLocation = (id: number) => {
+    setSelectedLocationId(id);
+    setBrowseMode("location");
+  };
+
+  const handleComputeSimilar = async () => {
+    if (selectedAlbumId === null) return;
+    setComputingSimilar(true);
+    try {
+      const groups = await getSimilarGroups(selectedAlbumId);
+      setSimilarGroups(groups);
+      if (groups.length > 0) {
+        setSelectedGroupId(groups[0].id);
+        setBrowseMode("similar");
+      }
+      const dupCount = groups.reduce((acc, g) => acc + g.count, 0);
+      showToast(
+        groups.length > 0
+          ? `找到 ${groups.length} 组相似照片（共 ${dupCount} 张），每组已按评分排好序`
+          : "未找到相似/重复照片",
+        groups.length > 0 ? "success" : "warning"
+      );
+    } catch (e) {
+      console.error("Similar grouping failed:", e);
+      showToast(`相似分组失败: ${e}`, "error");
+    } finally {
+      setComputingSimilar(false);
+    }
+  };
+
+  const handleSelectSimilar = (id: number) => {
+    setSelectedGroupId(id);
+    setBrowseMode("similar");
   };
 
   const handleBatchScore = async () => {
@@ -281,12 +429,27 @@ export function App() {
         <Sidebar
         albums={albums}
         selectedAlbumId={selectedAlbumId}
-        onSelectAlbum={setSelectedAlbumId}
+        onSelectAlbum={handleSelectAlbum}
         onScanDirectory={handleScanDirectory}
         onDeleteAlbum={handleDeleteAlbum}
         onClearCache={() => setClearCacheConfirm(true)}
         stats={stats}
         collapsed={sidebarCollapsed}
+        browseMode={browseMode}
+        onSelectBrowseMode={handleSelectBrowseMode}
+        onSelectTime={handleSelectTime}
+        timeRangeLabel={timeRange.label}
+        timeTree={timeTree}
+        onComputeLocation={handleComputeLocation}
+        onSelectLocation={handleSelectLocation}
+        locationGroups={locationGroups}
+        computingLocation={computingLocation}
+        selectedLocationId={selectedLocationId}
+        onComputeSimilar={handleComputeSimilar}
+        onSelectSimilar={handleSelectSimilar}
+        similarGroups={similarGroups}
+        computingSimilar={computingSimilar}
+        selectedGroupId={selectedGroupId}
       />
       <div className="flex-1 flex flex-col relative z-[1]">
         <Toolbar

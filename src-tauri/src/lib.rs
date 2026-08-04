@@ -1,4 +1,5 @@
 mod commands;
+mod grouping;
 mod image_proc;
 mod models;
 mod nima;
@@ -70,6 +71,9 @@ pub fn run() {
             commands::get_scoring_weights,
             commands::set_scoring_weights,
             commands::get_nima_status,
+            commands::get_time_tree,
+            commands::get_location_groups,
+            commands::get_similar_groups,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

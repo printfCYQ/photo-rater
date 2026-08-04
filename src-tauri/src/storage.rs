@@ -64,6 +64,9 @@ pub fn init_db() -> Result<(), String> {
         "noise_level REAL",
         "color_harmony REAL",
         "composition REAL",
+        "lat REAL",
+        "lon REAL",
+        "phash TEXT",
     ];
     for col_def in &migrate_cols {
         let col_name = col_def.split_whitespace().next().unwrap_or("");
@@ -188,12 +191,15 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                     color_harmony = COALESCE(?13, color_harmony),
                     composition = COALESCE(?14, composition),
                     face_count = COALESCE(?15, face_count),
-                    composite_score = COALESCE(?16, composite_score),
-                    user_rating = COALESCE(?17, user_rating),
-                    status = ?18,
-                    scored_at = COALESCE(?19, scored_at),
-                    rated_at = COALESCE(?20, rated_at),
-                    album_id = COALESCE(?21, album_id)
+                    lat = COALESCE(?16, lat),
+                    lon = COALESCE(?17, lon),
+                    phash = COALESCE(?18, phash),
+                    composite_score = COALESCE(?19, composite_score),
+                    user_rating = COALESCE(?20, user_rating),
+                    status = ?21,
+                    scored_at = COALESCE(?22, scored_at),
+                    rated_at = COALESCE(?23, rated_at),
+                    album_id = COALESCE(?24, album_id)
                  WHERE id = ?1",
                 params![
                     id,
@@ -211,6 +217,9 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                     photo.color_harmony,
                     photo.composition,
                     photo.face_count,
+                    photo.lat,
+                    photo.lon,
+                    photo.phash,
                     photo.composite_score,
                     photo.user_rating,
                     photo.status,
@@ -227,9 +236,9 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                 "INSERT INTO photos (
                     path, file_name, dir, file_size, width, height, taken_at,
                     ai_score, blur_score, exposure, fft_clarity, noise_level, color_harmony, composition,
-                    face_count, composite_score,
+                    face_count, lat, lon, phash, composite_score,
                     user_rating, status, scored_at, rated_at, created_at, album_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
                 params![
                     photo.path,
                     photo.file_name,
@@ -246,6 +255,9 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                     photo.color_harmony,
                     photo.composition,
                     photo.face_count,
+                    photo.lat,
+                    photo.lon,
+                    photo.phash,
                     photo.composite_score,
                     photo.user_rating,
                     photo.status,
@@ -276,9 +288,9 @@ pub fn batch_insert_photos(photos: &[Photo], album_id: i64) -> Result<i64, Strin
                 "INSERT OR IGNORE INTO photos (
                     path, file_name, dir, file_size, width, height, taken_at,
                     ai_score, blur_score, exposure, fft_clarity, noise_level, color_harmony, composition,
-                    face_count, composite_score,
+                    face_count, lat, lon, phash, composite_score,
                     user_rating, status, scored_at, rated_at, created_at, album_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
                 params![
                     photo.path,
                     photo.file_name,
@@ -295,6 +307,9 @@ pub fn batch_insert_photos(photos: &[Photo], album_id: i64) -> Result<i64, Strin
                     photo.color_harmony,
                     photo.composition,
                     photo.face_count,
+                    photo.lat,
+                    photo.lon,
+                    photo.phash,
                     photo.composite_score,
                     photo.user_rating,
                     photo.status,
@@ -329,7 +344,7 @@ pub fn list_photos(filter: &PhotoFilter) -> Result<Vec<Photo>, String> {
         let mut sql = String::from(
             "SELECT id, path, file_name, dir, file_size, width, height, taken_at,
              ai_score, blur_score, exposure, fft_clarity, noise_level, color_harmony, composition,
-             face_count, composite_score,
+             face_count, lat, lon, phash, composite_score,
              user_rating, status, scored_at, rated_at, created_at, album_id
              FROM photos WHERE 1=1",
         );
@@ -350,6 +365,16 @@ pub fn list_photos(filter: &PhotoFilter) -> Result<Vec<Photo>, String> {
         if let Some(max) = filter.max_score {
             sql.push_str(" AND composite_score <= ?");
             params_vec.push(Box::new(max));
+        }
+        if let Some(ref from) = filter.date_from {
+            // taken_at is stored as "YYYY:MM:DD HH:MM:SS"; normalize the date part
+            // to "YYYY-MM-DD" for lexicographic range comparison.
+            sql.push_str(" AND replace(substr(taken_at,1,10),':','-') >= ?");
+            params_vec.push(Box::new(from.clone()));
+        }
+        if let Some(ref to) = filter.date_to {
+            sql.push_str(" AND replace(substr(taken_at,1,10),':','-') <= ?");
+            params_vec.push(Box::new(to.clone()));
         }
 
         // Sort
@@ -403,13 +428,16 @@ pub fn list_photos(filter: &PhotoFilter) -> Result<Vec<Photo>, String> {
                     color_harmony: row.get(13)?,
                     composition: row.get(14)?,
                     face_count: row.get(15)?,
-                    composite_score: row.get(16)?,
-                    user_rating: row.get(17)?,
-                    status: row.get(18)?,
-                    scored_at: row.get(19)?,
-                    rated_at: row.get(20)?,
-                    created_at: row.get(21)?,
-                    album_id: row.get(22)?,
+                    lat: row.get(16)?,
+                    lon: row.get(17)?,
+                    phash: row.get(18)?,
+                    composite_score: row.get(19)?,
+                    user_rating: row.get(20)?,
+                    status: row.get(21)?,
+                    scored_at: row.get(22)?,
+                    rated_at: row.get(23)?,
+                    created_at: row.get(24)?,
+                    album_id: row.get(25)?,
                 })
             })
             .map_err(|e| format!("Failed to query photos: {}", e))?
@@ -471,6 +499,19 @@ pub fn update_scores(
                 ],
             )
             .map_err(|e| format!("Failed to update scores: {}", e))?;
+        Ok(rows > 0)
+    })
+}
+
+/// Persist a computed perceptual hash (hex string) for a photo.
+pub fn update_phash(path: &str, phash: &str) -> Result<bool, String> {
+    with_db(|conn| {
+        let rows = conn
+            .execute(
+                "UPDATE photos SET phash = ?1 WHERE path = ?2",
+                params![phash, path],
+            )
+            .map_err(|e| format!("Failed to update phash: {}", e))?;
         Ok(rows > 0)
     })
 }

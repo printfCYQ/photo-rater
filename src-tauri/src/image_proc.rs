@@ -6,6 +6,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
 
@@ -56,6 +57,93 @@ fn is_cache_valid(cache_path: &Path, source_path: &Path) -> bool {
     cache_mtime >= source_mtime
 }
 
+/// Check if a path points to a HEIC/HEIF file (not supported by the `image` crate).
+fn is_heic(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| {
+            let l = e.to_lowercase();
+            l == "heic" || l == "heif"
+        })
+        .unwrap_or(false)
+}
+
+/// Convert a HEIC/HEIF file to a cached JPEG via macOS `sips`, return its path.
+/// The converted file is cached and validated by mtime, so a second call is free.
+fn heic_temp_jpeg(path: &str) -> Result<PathBuf, String> {
+    let dir = cache_dir()?;
+    let hash = hash_path(path);
+    let out = dir.join(format!("dec_{}.jpg", hash));
+
+    // Reuse cached conversion if still valid
+    if out.exists() && is_cache_valid(&out, Path::new(path)) {
+        return Ok(out);
+    }
+
+    let status = Command::new("sips")
+        .args(["-s", "format", "jpeg", path, "--out", &out.to_string_lossy()])
+        .output()
+        .map_err(|e| format!("无法调用 sips 解码 HEIC（仅 macOS 支持）: {}", e))?;
+
+    if !status.status.success() {
+        let msg = String::from_utf8_lossy(&status.stderr);
+        return Err(format!("sips 解码 HEIC 失败: {}", msg));
+    }
+    if !out.exists() {
+        return Err("sips 未生成输出文件".to_string());
+    }
+    Ok(out)
+}
+
+/// Decode an image file into a `DynamicImage`.
+/// HEIC/HEIF (unsupported by the `image` crate) is transparently converted to
+/// JPEG via macOS `sips`, then loaded. This is the single decode entry point
+/// used by thumbnails, previews and heuristic analysis.
+pub fn decode_image(path: &str) -> Result<image::DynamicImage, String> {
+    let img_path = Path::new(path);
+    if is_heic(img_path) {
+        let jpeg_path = heic_temp_jpeg(path)?;
+        let reader = ImageReader::open(&jpeg_path)
+            .map_err(|e| format!("打开解码后的 HEIC 失败: {}", e))?;
+        return reader
+            .decode()
+            .map_err(|e| format!("解码 HEIC JPEG 失败: {}", e));
+    }
+    let reader = ImageReader::open(img_path)
+        .map_err(|e| format!("打开图片失败: {}", e))?;
+    reader
+        .decode()
+        .map_err(|e| format!("解码图片失败: {}", e))
+}
+
+/// Compute a 64-bit average perceptual hash (aHash) for near-duplicate detection.
+/// Resizes to 8x8 grayscale, thresholds by mean, packs bits into a u64.
+pub fn compute_phash(path: &str) -> Result<u64, String> {
+    let img = decode_image(path)?;
+    let gray = img
+        .grayscale()
+        .resize_exact(8, 8, FilterType::Nearest)
+        .to_luma8();
+    let pixels: Vec<u8> = gray.as_raw().to_vec();
+    if pixels.is_empty() {
+        return Err("空图像，无法计算 pHash".to_string());
+    }
+    let sum: u32 = pixels.iter().map(|&p| p as u32).sum();
+    let avg = (sum as f64 / pixels.len() as f64) as u8;
+    let mut hash: u64 = 0;
+    for (i, &p) in pixels.iter().enumerate() {
+        if p >= avg {
+            hash |= 1u64 << (63 - i);
+        }
+    }
+    Ok(hash)
+}
+
+/// Hamming distance between two 64-bit hashes (number of differing bits).
+pub fn phash_distance(a: u64, b: u64) -> u32 {
+    (a ^ b).count_ones()
+}
+
 /// Generate a thumbnail for an image and return the file path to the cached JPEG.
 /// Uses disk cache keyed by hash(path+size), validated by mtime.
 pub fn get_thumbnail(path: &str, size: u32) -> Result<String, String> {
@@ -87,12 +175,7 @@ pub fn get_thumbnail(path: &str, size: u32) -> Result<String, String> {
     }
 
     // Generate thumbnail
-    let reader = ImageReader::open(img_path)
-        .map_err(|e| format!("Failed to open image: {}", e))?;
-
-    let img = reader
-        .decode()
-        .map_err(|e| format!("Failed to decode image: {}", e))?;
+    let img = decode_image(path)?;
 
     // Resize using Triangle (fast) — only resize if larger than target
     let thumbnail = if img.width() > size || img.height() > size {
@@ -146,12 +229,7 @@ pub fn get_preview_image(path: &str, max_width: u32) -> Result<String, String> {
         return Ok(cache_file.to_string_lossy().to_string());
     }
 
-    let reader = ImageReader::open(img_path)
-        .map_err(|e| format!("Failed to open image: {}", e))?;
-
-    let img = reader
-        .decode()
-        .map_err(|e| format!("Failed to decode image: {}", e))?;
+    let img = decode_image(path)?;
 
     // Resize to fit within max_width while maintaining aspect ratio
     let preview = if img.width() > max_width {
@@ -372,13 +450,7 @@ pub struct HeuristicSignals {
 /// Calculate all heuristic signals for a photo.
 /// Processes at 512px for a good balance of speed and accuracy.
 pub fn calculate_heuristics(path: &str) -> Result<HeuristicSignals, String> {
-    let img_path = Path::new(path);
-    let reader = ImageReader::open(img_path)
-        .map_err(|e| format!("Failed to open image: {}", e))?;
-
-    let img = reader
-        .decode()
-        .map_err(|e| format!("Failed to decode image: {}", e))?;
+    let img = decode_image(path)?;
 
     // Downscale to 512px max side for efficient analysis
     let w = img.width();

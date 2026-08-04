@@ -1,3 +1,4 @@
+use crate::grouping::{LocationGroup, PhotoGroup, TimeNode};
 use crate::image_proc;
 use crate::models::{Album, AiScore, ExportResult, Photo, PhotoFilter, ScanResult};
 use crate::nima;
@@ -394,6 +395,26 @@ pub fn set_scoring_weights(weights: ScoringWeights) -> Result<ScoringWeights, St
 #[tauri::command]
 pub fn get_nima_status() -> bool {
     nima::is_loaded()
+}
+
+/// Build the year → month → day time tree for an album.
+#[tauri::command]
+pub fn get_time_tree(album_id: i64) -> Vec<TimeNode> {
+    crate::grouping::build_time_tree(album_id)
+}
+
+/// Cluster an album's photos by GPS location (offline proximity clustering).
+#[tauri::command]
+pub fn get_location_groups(album_id: i64) -> Vec<LocationGroup> {
+    crate::grouping::build_location_groups(album_id)
+}
+
+/// Find near-duplicate / similar photo groups via perceptual hash.
+/// `threshold` is the max Hamming distance between hashes (default 10).
+#[tauri::command]
+pub fn get_similar_groups(album_id: i64, threshold: Option<u32>) -> Vec<PhotoGroup> {
+    let threshold = threshold.unwrap_or(10).clamp(1, 32);
+    crate::grouping::build_similar_groups(album_id, threshold)
 }
 
 // We need rayon's parallel iterator

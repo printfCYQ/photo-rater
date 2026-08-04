@@ -4,10 +4,13 @@ import type {
   Album,
   AiScore,
   ExportResult,
+  LocationGroup,
   Photo,
   PhotoFilter,
+  PhotoGroup,
   PhotoStats,
   ScanResult,
+  TimeNode,
 } from "./types";
 
 export async function scanDirectory(
@@ -138,6 +141,24 @@ export interface ScoringWeights {
 /// Check if the NIMA AI model is loaded.
 export async function getNimaStatus(): Promise<boolean> {
   return invoke<boolean>("get_nima_status");
+}
+
+/// Build the year → month → day time tree for an album.
+export async function getTimeTree(albumId: number): Promise<TimeNode[]> {
+  return invoke<TimeNode[]>("get_time_tree", { albumId });
+}
+
+/// Cluster an album's photos by GPS location (offline).
+export async function getLocationGroups(albumId: number): Promise<LocationGroup[]> {
+  return invoke<LocationGroup[]>("get_location_groups", { albumId });
+}
+
+/// Find near-duplicate / similar photo groups via perceptual hash.
+export async function getSimilarGroups(
+  albumId: number,
+  threshold?: number
+): Promise<PhotoGroup[]> {
+  return invoke<PhotoGroup[]>("get_similar_groups", { albumId, threshold: threshold ?? null });
 }
 
 // Event listeners

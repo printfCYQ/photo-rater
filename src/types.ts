@@ -15,6 +15,9 @@ export interface Photo {
   color_harmony: number | null;
   composition: number | null;
   face_count: number | null;
+  lat: number | null;
+  lon: number | null;
+  phash: string | null;
   composite_score: number | null;
   user_rating: number | null;
   status: "pending" | "keep" | "reject";
@@ -38,10 +41,42 @@ export interface PhotoFilter {
   status?: string | null;
   min_score?: number | null;
   max_score?: number | null;
+  date_from?: string | null;
+  date_to?: string | null;
   sort_by: string;
   sort_desc: boolean;
   limit?: number | null;
   offset?: number | null;
+}
+
+/// Time-browsing tree node (year / month / day).
+export interface TimeNode {
+  key: string;
+  label: string;
+  count: number;
+  level: "year" | "month" | "day";
+  from: string;
+  to: string;
+  children: TimeNode[];
+}
+
+/// A location cluster (photos taken at roughly the same place).
+export interface LocationGroup {
+  id: number;
+  label: string;
+  count: number;
+  lat: number | null;
+  lon: number | null;
+  photos: Photo[];
+}
+
+/// A group of near-duplicate / similar photos.
+export interface PhotoGroup {
+  id: number;
+  count: number;
+  best_score: number | null;
+  representative: Photo;
+  photos: Photo[];
 }
 
 export interface ScanResult {
