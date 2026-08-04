@@ -14,6 +14,7 @@ import {
   listPhotos,
   onBatchScoreProgress,
   ratePhoto,
+  rescanMetadata,
   scanDirectory,
 } from "../api";
 import type { Album, LocationGroup, Photo, PhotoGroup, PhotoStats, TimeNode } from "../types";
@@ -399,6 +400,18 @@ export function App() {
     }
   };
 
+  const handleRescanMetadata = async () => {
+    if (selectedAlbumId === null) return;
+    try {
+      const count = await rescanMetadata(selectedAlbumId);
+      await loadPhotos();
+      showToast(`已重新读取 ${count} 张照片的拍摄参数`, "success");
+    } catch (e) {
+      console.error("Rescan metadata failed:", e);
+      showToast(`刷新元数据失败: ${e}`, "error");
+    }
+  };
+
   const handleSelectExportFolder = async () => {
     // Warn immediately (before opening the folder dialog) if nothing is marked keep
     const keepCount = photos.filter((p) => p.status === "keep").length;
@@ -465,6 +478,8 @@ export function App() {
           onMinScoreChange={setMinScore}
           onBatchScore={handleBatchScore}
           onExport={handleSelectExportFolder}
+          onRescanMetadata={handleRescanMetadata}
+          canRescan={selectedAlbumId !== null}
           scoring={scoring}
           scoreProgress={scoreProgress}
           photoCount={photos.length}

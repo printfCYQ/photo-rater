@@ -143,6 +143,11 @@ export async function getNimaStatus(): Promise<boolean> {
   return invoke<boolean>("get_nima_status");
 }
 
+/// Re-read EXIF camera metadata for an album's photos. Returns count updated.
+export async function rescanMetadata(albumId: number): Promise<number> {
+  return invoke<number>("rescan_album_metadata", { albumId });
+}
+
 /// Build the year → month → day time tree for an album.
 export async function getTimeTree(albumId: number): Promise<TimeNode[]> {
   return invoke<TimeNode[]>("get_time_tree", { albumId });

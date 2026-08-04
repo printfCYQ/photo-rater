@@ -17,6 +17,14 @@ export interface Photo {
   face_count: number | null;
   lat: number | null;
   lon: number | null;
+  camera_make: string | null;
+  camera_model: string | null;
+  lens: string | null;
+  aperture: number | null;
+  shutter_speed: number | null;
+  iso: number | null;
+  focal_length: number | null;
+  exposure_bias: number | null;
   phash: string | null;
   composite_score: number | null;
   user_rating: number | null;

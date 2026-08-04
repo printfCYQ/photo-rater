@@ -5,8 +5,8 @@ use crate::nima;
 use crate::scoring::{self, ScoringWeights};
 use crate::scanner;
 use crate::storage;
-use std::fs;
 use std::path::Path;
+use std::fs;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
@@ -395,6 +395,49 @@ pub fn set_scoring_weights(weights: ScoringWeights) -> Result<ScoringWeights, St
 #[tauri::command]
 pub fn get_nima_status() -> bool {
     nima::is_loaded()
+}
+
+/// Re-read EXIF camera metadata for every photo in an album and persist it.
+/// Lets already-imported albums pick up the newly-added camera fields
+/// (make/model/lens/aperture/shutter/iso/focal length/exposure bias).
+#[tauri::command]
+pub fn rescan_album_metadata(album_id: i64) -> usize {
+    let filter = PhotoFilter {
+        album_id: Some(album_id),
+        ..Default::default()
+    };
+    let photos = storage::list_photos(&filter).unwrap_or_default();
+    let mut updated = 0usize;
+    for p in &photos {
+        let (
+            _taken_at,
+            _width,
+            _height,
+            _lat,
+            _lon,
+            camera_make,
+            camera_model,
+            lens,
+            aperture,
+            shutter_speed,
+            iso,
+            focal_length,
+            exposure_bias,
+        ) = scanner::read_exif(Path::new(&p.path));
+        let _ = storage::update_camera_metadata(
+            &p.path,
+            camera_make,
+            camera_model,
+            lens,
+            aperture,
+            shutter_speed,
+            iso,
+            focal_length,
+            exposure_bias,
+        );
+        updated += 1;
+    }
+    updated
 }
 
 /// Build the year → month → day time tree for an album.

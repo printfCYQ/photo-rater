@@ -71,6 +71,7 @@ pub fn run() {
             commands::get_scoring_weights,
             commands::set_scoring_weights,
             commands::get_nima_status,
+            commands::rescan_album_metadata,
             commands::get_time_tree,
             commands::get_location_groups,
             commands::get_similar_groups,

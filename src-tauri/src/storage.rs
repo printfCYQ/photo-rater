@@ -67,6 +67,14 @@ pub fn init_db() -> Result<(), String> {
         "lat REAL",
         "lon REAL",
         "phash TEXT",
+        "camera_make TEXT",
+        "camera_model TEXT",
+        "lens TEXT",
+        "aperture REAL",
+        "shutter_speed REAL",
+        "iso INTEGER",
+        "focal_length REAL",
+        "exposure_bias REAL",
     ];
     for col_def in &migrate_cols {
         let col_name = col_def.split_whitespace().next().unwrap_or("");
@@ -194,12 +202,20 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                     lat = COALESCE(?16, lat),
                     lon = COALESCE(?17, lon),
                     phash = COALESCE(?18, phash),
-                    composite_score = COALESCE(?19, composite_score),
-                    user_rating = COALESCE(?20, user_rating),
-                    status = ?21,
-                    scored_at = COALESCE(?22, scored_at),
-                    rated_at = COALESCE(?23, rated_at),
-                    album_id = COALESCE(?24, album_id)
+                    camera_make = COALESCE(?19, camera_make),
+                    camera_model = COALESCE(?20, camera_model),
+                    lens = COALESCE(?21, lens),
+                    aperture = COALESCE(?22, aperture),
+                    shutter_speed = COALESCE(?23, shutter_speed),
+                    iso = COALESCE(?24, iso),
+                    focal_length = COALESCE(?25, focal_length),
+                    exposure_bias = COALESCE(?26, exposure_bias),
+                    composite_score = COALESCE(?27, composite_score),
+                    user_rating = COALESCE(?28, user_rating),
+                    status = ?29,
+                    scored_at = COALESCE(?30, scored_at),
+                    rated_at = COALESCE(?31, rated_at),
+                    album_id = COALESCE(?32, album_id)
                  WHERE id = ?1",
                 params![
                     id,
@@ -220,6 +236,14 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                     photo.lat,
                     photo.lon,
                     photo.phash,
+                    photo.camera_make,
+                    photo.camera_model,
+                    photo.lens,
+                    photo.aperture,
+                    photo.shutter_speed,
+                    photo.iso,
+                    photo.focal_length,
+                    photo.exposure_bias,
                     photo.composite_score,
                     photo.user_rating,
                     photo.status,
@@ -236,9 +260,10 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                 "INSERT INTO photos (
                     path, file_name, dir, file_size, width, height, taken_at,
                     ai_score, blur_score, exposure, fft_clarity, noise_level, color_harmony, composition,
-                    face_count, lat, lon, phash, composite_score,
+                    face_count, lat, lon, phash, camera_make, camera_model, lens,
+                    aperture, shutter_speed, iso, focal_length, exposure_bias, composite_score,
                     user_rating, status, scored_at, rated_at, created_at, album_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33)",
                 params![
                     photo.path,
                     photo.file_name,
@@ -258,6 +283,14 @@ pub fn upsert_photo(photo: &Photo) -> Result<Photo, String> {
                     photo.lat,
                     photo.lon,
                     photo.phash,
+                    photo.camera_make,
+                    photo.camera_model,
+                    photo.lens,
+                    photo.aperture,
+                    photo.shutter_speed,
+                    photo.iso,
+                    photo.focal_length,
+                    photo.exposure_bias,
                     photo.composite_score,
                     photo.user_rating,
                     photo.status,
@@ -288,9 +321,10 @@ pub fn batch_insert_photos(photos: &[Photo], album_id: i64) -> Result<i64, Strin
                 "INSERT OR IGNORE INTO photos (
                     path, file_name, dir, file_size, width, height, taken_at,
                     ai_score, blur_score, exposure, fft_clarity, noise_level, color_harmony, composition,
-                    face_count, lat, lon, phash, composite_score,
+                    face_count, lat, lon, phash, camera_make, camera_model, lens,
+                    aperture, shutter_speed, iso, focal_length, exposure_bias, composite_score,
                     user_rating, status, scored_at, rated_at, created_at, album_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33)",
                 params![
                     photo.path,
                     photo.file_name,
@@ -310,6 +344,14 @@ pub fn batch_insert_photos(photos: &[Photo], album_id: i64) -> Result<i64, Strin
                     photo.lat,
                     photo.lon,
                     photo.phash,
+                    photo.camera_make,
+                    photo.camera_model,
+                    photo.lens,
+                    photo.aperture,
+                    photo.shutter_speed,
+                    photo.iso,
+                    photo.focal_length,
+                    photo.exposure_bias,
                     photo.composite_score,
                     photo.user_rating,
                     photo.status,
@@ -344,7 +386,8 @@ pub fn list_photos(filter: &PhotoFilter) -> Result<Vec<Photo>, String> {
         let mut sql = String::from(
             "SELECT id, path, file_name, dir, file_size, width, height, taken_at,
              ai_score, blur_score, exposure, fft_clarity, noise_level, color_harmony, composition,
-             face_count, lat, lon, phash, composite_score,
+             face_count, lat, lon, phash, camera_make, camera_model, lens,
+             aperture, shutter_speed, iso, focal_length, exposure_bias, composite_score,
              user_rating, status, scored_at, rated_at, created_at, album_id
              FROM photos WHERE 1=1",
         );
@@ -431,13 +474,21 @@ pub fn list_photos(filter: &PhotoFilter) -> Result<Vec<Photo>, String> {
                     lat: row.get(16)?,
                     lon: row.get(17)?,
                     phash: row.get(18)?,
-                    composite_score: row.get(19)?,
-                    user_rating: row.get(20)?,
-                    status: row.get(21)?,
-                    scored_at: row.get(22)?,
-                    rated_at: row.get(23)?,
-                    created_at: row.get(24)?,
-                    album_id: row.get(25)?,
+                    camera_make: row.get(19)?,
+                    camera_model: row.get(20)?,
+                    lens: row.get(21)?,
+                    aperture: row.get(22)?,
+                    shutter_speed: row.get(23)?,
+                    iso: row.get(24)?,
+                    focal_length: row.get(25)?,
+                    exposure_bias: row.get(26)?,
+                    composite_score: row.get(27)?,
+                    user_rating: row.get(28)?,
+                    status: row.get(29)?,
+                    scored_at: row.get(30)?,
+                    rated_at: row.get(31)?,
+                    created_at: row.get(32)?,
+                    album_id: row.get(33)?,
                 })
             })
             .map_err(|e| format!("Failed to query photos: {}", e))?
@@ -512,6 +563,40 @@ pub fn update_phash(path: &str, phash: &str) -> Result<bool, String> {
                 params![phash, path],
             )
             .map_err(|e| format!("Failed to update phash: {}", e))?;
+        Ok(rows > 0)
+    })
+}
+
+/// Re-read and persist camera metadata (EXIF) for a photo. Used by album metadata rescan.
+pub fn update_camera_metadata(
+    path: &str,
+    camera_make: Option<String>,
+    camera_model: Option<String>,
+    lens: Option<String>,
+    aperture: Option<f64>,
+    shutter_speed: Option<f64>,
+    iso: Option<i64>,
+    focal_length: Option<f64>,
+    exposure_bias: Option<f64>,
+) -> Result<bool, String> {
+    with_db(|conn| {
+        let rows = conn
+            .execute(
+                "UPDATE photos SET camera_make = ?1, camera_model = ?2, lens = ?3, aperture = ?4,
+                 shutter_speed = ?5, iso = ?6, focal_length = ?7, exposure_bias = ?8 WHERE path = ?9",
+                params![
+                    camera_make,
+                    camera_model,
+                    lens,
+                    aperture,
+                    shutter_speed,
+                    iso,
+                    focal_length,
+                    exposure_bias,
+                    path
+                ],
+            )
+            .map_err(|e| format!("Failed to update camera metadata: {}", e))?;
         Ok(rows > 0)
     })
 }

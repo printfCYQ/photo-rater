@@ -190,6 +190,13 @@
            bg-surface-raised border border-base-700/60 text-base-400;
   }
 
+  /* EXIF metadata chip in the Lightbox info panel */
+  .meta-chip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px]
+           bg-surface-raised/60 border border-base-700/40 text-base-300
+           whitespace-nowrap max-w-[240px] truncate;
+  }
+
   /* Keyboard shortcut key */
   .kbd {
     @apply inline-flex items-center justify-center px-1.5 py-0.5

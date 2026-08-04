@@ -40,7 +40,21 @@ pub fn scan_directory(dir: &str) -> Vec<Photo> {
                 .unwrap_or(0);
 
             // Read EXIF (parallel)
-            let (taken_at, width, height, lat, lon) = read_exif(file_path);
+            let (
+                taken_at,
+                width,
+                height,
+                lat,
+                lon,
+                camera_make,
+                camera_model,
+                lens,
+                aperture,
+                shutter_speed,
+                iso,
+                focal_length,
+                exposure_bias,
+            ) = read_exif(file_path);
 
             Photo {
                 id: None,
@@ -61,6 +75,14 @@ pub fn scan_directory(dir: &str) -> Vec<Photo> {
                 face_count: None,
                 lat,
                 lon,
+                camera_make,
+                camera_model,
+                lens,
+                aperture,
+                shutter_speed,
+                iso,
+                focal_length,
+                exposure_bias,
                 phash: None,
                 composite_score: None,
                 user_rating: None,
@@ -75,18 +97,49 @@ pub fn scan_directory(dir: &str) -> Vec<Photo> {
 }
 
 /// Read EXIF data from an image file.
-/// Returns (taken_at, width, height, lat, lon).
+/// Returns (taken_at, width, height, lat, lon, make, model, lens,
+/// aperture, shutter_speed, iso, focal_length, exposure_bias).
 /// `taken_at` falls back to file modification time when EXIF is absent.
-fn read_exif(path: &Path) -> (Option<String>, Option<i64>, Option<i64>, Option<f64>, Option<f64>) {
+pub fn read_exif(path: &Path) -> (
+    Option<String>,
+    Option<i64>,
+    Option<i64>,
+    Option<f64>,
+    Option<f64>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<f64>,
+    Option<f64>,
+    Option<i64>,
+    Option<f64>,
+    Option<f64>,
+) {
+    let no_meta: (
+        Option<String>,
+        Option<i64>,
+        Option<i64>,
+        Option<f64>,
+        Option<f64>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<f64>,
+        Option<f64>,
+        Option<i64>,
+        Option<f64>,
+        Option<f64>,
+    ) = (None, None, None, None, None, None, None, None, None, None, None, None, None);
+
     let file = match std::fs::File::open(path) {
         Ok(f) => f,
-        Err(_) => return (None, None, None, None, None),
+        Err(_) => return no_meta,
     };
     let mut buf_reader = std::io::BufReader::new(&file);
     let exif_reader = exif::Reader::new();
     let exif_data = match exif_reader.read_from_container(&mut buf_reader) {
         Ok(e) => e,
-        Err(_) => return (fallback_taken_at(path), None, None, None, None),
+        Err(_) => return (fallback_taken_at(path), None, None, None, None, None, None, None, None, None, None, None, None),
     };
 
     let taken_at = exif_data
@@ -111,7 +164,56 @@ fn read_exif(path: &Path) -> (Option<String>, Option<i64>, Option<i64>, Option<f
 
     let (lat, lon) = read_gps(&exif_data);
 
-    (taken_at, width, height, lat, lon)
+    let camera_make = exif_data
+        .get_field(exif::Tag::Make, exif::In::PRIMARY)
+        .map(|f| f.display_value().to_string());
+    let camera_model = exif_data
+        .get_field(exif::Tag::Model, exif::In::PRIMARY)
+        .map(|f| f.display_value().to_string());
+    let lens = exif_data
+        .get_field(exif::Tag::LensModel, exif::In::PRIMARY)
+        .map(|f| f.display_value().to_string());
+    let aperture = exif_data
+        .get_field(exif::Tag::FNumber, exif::In::PRIMARY)
+        .and_then(|f| rational_to_f64(&f.value));
+    let shutter_speed = exif_data
+        .get_field(exif::Tag::ExposureTime, exif::In::PRIMARY)
+        .and_then(|f| rational_to_f64(&f.value));
+    let iso = exif_data
+        .get_field(exif::Tag::PhotographicSensitivity, exif::In::PRIMARY)
+        .and_then(|f| f.value.get_uint(0))
+        .map(|v| v as i64);
+    let focal_length = exif_data
+        .get_field(exif::Tag::FocalLength, exif::In::PRIMARY)
+        .and_then(|f| rational_to_f64(&f.value));
+    let exposure_bias = exif_data
+        .get_field(exif::Tag::ExposureBiasValue, exif::In::PRIMARY)
+        .and_then(|f| rational_to_f64(&f.value));
+
+    (
+        taken_at,
+        width,
+        height,
+        lat,
+        lon,
+        camera_make,
+        camera_model,
+        lens,
+        aperture,
+        shutter_speed,
+        iso,
+        focal_length,
+        exposure_bias,
+    )
+}
+
+/// Extract the first rational value as f64 (handles both unsigned and signed rationals).
+fn rational_to_f64(v: &exif::Value) -> Option<f64> {
+    match v {
+        exif::Value::Rational(rats) => rats.first().map(|r| r.to_f64()),
+        exif::Value::SRational(rats) => rats.first().map(|r| r.to_f64()),
+        _ => None,
+    }
 }
 
 /// Format file modification time as EXIF-style "YYYY:MM:DD HH:MM:SS".

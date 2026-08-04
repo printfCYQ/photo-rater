@@ -8,6 +8,19 @@ import type { Photo } from "../types";
 import { getFileUrl, getThumbnailUrl } from "../api";
 import { thumbUrlCache } from "./PhotoGrid";
 
+/// Format a shutter speed in seconds to a readable string (e.g. 1/200s, 2s).
+function formatShutter(seconds: number): string {
+  if (!isFinite(seconds) || seconds <= 0) return "—";
+  if (seconds >= 1) return `${seconds}s`;
+  return `1/${Math.round(1 / seconds)}s`;
+}
+
+/// Format exposure compensation in EV (e.g. +0.3, -1).
+function formatExposureBias(ev: number): string {
+  const sign = ev > 0 ? "+" : "";
+  return `${sign}${ev}`;
+}
+
 interface LightboxProps {
   photos: Photo[];
   currentIndex: number;
@@ -472,6 +485,58 @@ export function Lightbox({
 
         {/* Bottom Bar */}
         <div className="px-5 py-3.5 bg-base/80 backdrop-blur-xl border-t border-base-800/40 flex flex-col gap-2.5 flex-shrink-0">
+          {/* Capture info row — EXIF metadata */}
+          <div className="flex gap-1.5 flex-wrap items-center">
+            {photo?.taken_at && (
+              <span className="meta-chip" title="拍摄时间">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" />
+                </svg>
+                {photo.taken_at}
+              </span>
+            )}
+            {(photo?.camera_make || photo?.camera_model) && (
+              <span className="meta-chip" title={`${photo.camera_make ?? ""} ${photo.camera_model ?? ""}`.trim()}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                {[photo.camera_make, photo.camera_model].filter(Boolean).join(" ")}
+              </span>
+            )}
+            {photo?.lens && (
+              <span className="meta-chip" title={photo.lens}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3" />
+                </svg>
+                {photo.lens}
+              </span>
+            )}
+            {photo?.aperture != null && (
+              <span className="meta-chip" title="光圈">ƒ/{photo.aperture}</span>
+            )}
+            {photo?.shutter_speed != null && (
+              <span className="meta-chip" title="快门">{formatShutter(photo.shutter_speed)}</span>
+            )}
+            {photo?.iso != null && (
+              <span className="meta-chip" title="感光度">ISO {photo.iso}</span>
+            )}
+            {photo?.focal_length != null && (
+              <span className="meta-chip" title="焦距">{photo.focal_length}mm</span>
+            )}
+            {photo?.exposure_bias != null && (
+              <span className="meta-chip" title="曝光补偿">{formatExposureBias(photo.exposure_bias)} EV</span>
+            )}
+            {photo?.lat != null && photo?.lon != null && (
+              <span className="meta-chip" title="GPS 坐标">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
+                </svg>
+                {photo.lat.toFixed(4)}, {photo.lon.toFixed(4)}
+              </span>
+            )}
+          </div>
+
           {/* Scores row */}
           <div className="flex gap-2 flex-wrap">
             {photo?.composite_score !== null && photo?.composite_score !== undefined && (
