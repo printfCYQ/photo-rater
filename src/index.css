@@ -176,6 +176,28 @@
     animation: spin 0.7s linear infinite;
   }
 
+  /* Skeleton placeholder with a clear sweeping shimmer — tells the user
+     the thumbnail is still loading (not a blank/broken cell). */
+  .skeleton-shimmer {
+    position: absolute;
+    inset: 0;
+    background: #1a1a1f;
+    overflow: hidden;
+  }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.10) 50%,
+      transparent 100%
+    );
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+
   /* Lightbox toolbar button */
   .lb-tool-btn {
     @apply w-[34px] h-[34px] rounded-md flex items-center justify-center

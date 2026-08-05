@@ -13,6 +13,8 @@ import {
   listAlbums,
   listPhotos,
   onBatchScoreProgress,
+  onScanComplete,
+  onScanProgress,
   ratePhoto,
   rescanMetadata,
   scanDirectory,
@@ -66,6 +68,12 @@ export function App() {
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const [computingLocation, setComputingLocation] = useState(false);
   const [computingSimilar, setComputingSimilar] = useState(false);
+  // Background import progress (null when no import is running).
+  const [importProgress, setImportProgress] = useState<{
+    stage: string;
+    current: number;
+    total: number;
+  } | null>(null);
 
   const showToast = (message: string, type: ToastType = "error") => {
     const id = Date.now() + Math.random();
@@ -111,6 +119,39 @@ export function App() {
       unlisten = fn;
     });
     return () => unlisten?.();
+  }, []);
+
+  // Listen for background import progress + completion.
+  // Import runs off the main thread on the Rust side; here we just render the
+  // live progress and finalize (refresh albums + auto-select) when it finishes.
+  useEffect(() => {
+    let unlistenProgress: (() => void) | undefined;
+    let unlistenComplete: (() => void) | undefined;
+
+    onScanProgress((payload) => {
+      setImportProgress(payload);
+    }).then((fn) => {
+      unlistenProgress = fn;
+    });
+
+    onScanComplete((payload) => {
+      void (async () => {
+        await loadAlbums();
+        resetView();
+        setSelectedAlbumId(payload.album_id);
+        loadTimeTree(payload.album_id);
+        setImportProgress(null);
+        showToast(`导入完成：共 ${payload.total} 张照片`, "success");
+      })();
+    }).then((fn) => {
+      unlistenComplete = fn;
+    });
+
+    return () => {
+      unlistenProgress?.();
+      unlistenComplete?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAlbums = async () => {
@@ -209,18 +250,23 @@ export function App() {
       if (typeof selected !== "string") return;
 
       const albumName = selected.split("/").pop() || "未命名相册";
-      setLoading(true);
 
-      const result = await scanDirectory(selected, albumName);
-      await loadAlbums();
-      resetView();
-      setSelectedAlbumId(result.album_id);
-      loadTimeTree(result.album_id);
+      // Fire-and-forget: the heavy scan runs in the background on the Rust side.
+      // Progress is shown via the scan-progress event; completion is handled by the
+      // scan-complete listener above. This keeps the UI fully responsive during import.
+      setImportProgress({ stage: "scanning", current: 0, total: 0 });
+      showToast("后台导入中…", "info");
+      scanDirectory(selected, albumName)
+        .then(() => {
+          // Result is consumed via the scan-complete event; nothing else to do here.
+        })
+        .catch((e) => {
+          console.error("Failed to scan directory:", e);
+          setImportProgress(null);
+          showToast(`扫描失败: ${e}`, "error");
+        });
     } catch (e) {
-      console.error("Failed to scan directory:", e);
-      showToast(`扫描失败: ${e}`, "error");
-    } finally {
-      setLoading(false);
+      console.error("Failed to open folder:", e);
     }
   };
 
@@ -400,16 +446,20 @@ export function App() {
     }
   };
 
-  const handleRescanMetadata = async () => {
+  const handleRescanMetadata = () => {
     if (selectedAlbumId === null) return;
-    try {
-      const count = await rescanMetadata(selectedAlbumId);
-      await loadPhotos();
-      showToast(`已重新读取 ${count} 张照片的拍摄参数`, "success");
-    } catch (e) {
-      console.error("Rescan metadata failed:", e);
-      showToast(`刷新元数据失败: ${e}`, "error");
-    }
+    // Fire-and-forget: the (now async) rescan runs off the main thread, so the
+    // UI stays responsive. Show a start toast, then refresh on completion.
+    showToast("正在重新读取拍摄参数…", "info");
+    rescanMetadata(selectedAlbumId)
+      .then(async (count) => {
+        await loadPhotos();
+        showToast(`已重新读取 ${count} 张照片的拍摄参数`, "success");
+      })
+      .catch((e) => {
+        console.error("Rescan metadata failed:", e);
+        showToast(`刷新元数据失败: ${e}`, "error");
+      });
   };
 
   const handleSelectExportFolder = async () => {
@@ -497,7 +547,7 @@ export function App() {
           sidebarWidth={sidebarCollapsed ? 0 : 260}
           keyboardEnabled={lightboxIndex === null}
         />
-        <StatusBar stats={stats} photoCount={photos.length} loading={loading} />
+        <StatusBar stats={stats} photoCount={photos.length} loading={loading} importProgress={importProgress} />
       </div>
       </div>
       {lightboxIndex !== null && photos[lightboxIndex] && (

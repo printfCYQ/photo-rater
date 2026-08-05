@@ -1,4 +1,4 @@
-export type ToastType = "success" | "error" | "warning";
+export type ToastType = "success" | "error" | "warning" | "info";
 
 export interface ToastItem {
   id: number;
@@ -13,16 +13,20 @@ interface ToastContainerProps {
 
 const styleMap: Record<ToastType, { box: string; icon: string }> = {
   success: {
-    box: "border-keep/30 bg-keep-muted",
+    box: "border-base-700 border-l-2 border-l-keep bg-base-900/95",
     icon: "text-keep",
   },
   error: {
-    box: "border-reject/30 bg-reject-muted",
+    box: "border-base-700 border-l-2 border-l-reject bg-base-900/95",
     icon: "text-reject",
   },
   warning: {
-    box: "border-warning/30 bg-warning-muted",
+    box: "border-base-700 border-l-2 border-l-warning bg-base-900/95",
     icon: "text-warning",
+  },
+  info: {
+    box: "border-base-700 border-l-2 border-l-accent bg-base-900/95",
+    icon: "text-accent",
   },
 };
 
@@ -42,6 +46,15 @@ function ToastIcon({ type }: { type: ToastType }) {
         <circle cx="12" cy="12" r="10" />
         <line x1="15" y1="9" x2="9" y2="15" />
         <line x1="9" y1="9" x2="15" y2="15" />
+      </svg>
+    );
+  }
+  if (type === "info") {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={cls} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="11" x2="12" y2="16" />
+        <line x1="12" y1="8" x2="12.01" y2="8" />
       </svg>
     );
   }
@@ -72,7 +85,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
             <div className={`mt-0.5 flex-shrink-0 ${s.icon}`}>
               <ToastIcon type={t.type} />
             </div>
-            <span className="text-[13px] leading-relaxed text-base-100 whitespace-pre-line">
+            <span className="text-[13px] font-medium leading-relaxed text-base-100 whitespace-pre-line">
               {t.message}
             </span>
           </div>

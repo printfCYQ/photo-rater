@@ -11,67 +11,123 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
 /// Scan a directory and create an album with the found photos.
+///
+/// Runs as an async command: the heavy EXIF parsing + DB insert is offloaded to a
+/// blocking thread via `spawn_blocking`, so the Tauri main thread stays free and the
+/// UI never freezes even for very large albums. Progress is streamed back through the
+/// `scan-progress` event (stage: "scanning" -> "saving" -> "done"), and a final
+/// `scan-complete` event is emitted when finished.
 #[tauri::command]
-pub fn scan_directory(
+pub async fn scan_directory(
     dir: String,
     album_name: String,
     app: AppHandle,
 ) -> Result<ScanResult, String> {
-    // Create album
+    // Create album record (fast, synchronous — single INSERT).
     let album = storage::create_album(&album_name, &dir)?;
+    let album_id = album
+        .id
+        .ok_or_else(|| "Failed to create album: no id returned".to_string())?;
 
-    // Scan directory
-    let photos = scanner::scan_directory(&dir);
-
-    // Insert into database
-    let count = storage::batch_insert_photos(&photos, album.id.unwrap())?;
-
-    // Emit progress event
+    // The directory walk itself is synchronous I/O and can take a while for very
+    // large libraries, so it also runs off the main thread. We emit an indeterminate
+    // progress first; the real total is announced once the walk finishes.
     let _ = app.emit(
-        "scan-complete",
-        serde_json::json!({
-            "album_id": album.id,
-            "total": count,
-        }),
+        "scan-progress",
+        serde_json::json!({ "stage": "scanning", "current": 0, "total": 0 }),
     );
 
-    // Return photos with album_id set
+    // Offload the directory walk + CPU-heavy EXIF parsing + DB insert to a blocking
+    // thread so the Tauri main thread stays free and the OS wait cursor never appears.
+    let app_for_scan = app.clone();
+    let (photos, count) = tokio::task::spawn_blocking(move || -> Result<(Vec<Photo>, i64), String> {
+        // Walk the directory (off main thread now).
+        let entries = scanner::collect_image_paths(&dir);
+        let total = entries.len();
+
+        // Announce the real total before per-file progress begins.
+        let _ = app_for_scan.emit(
+            "scan-progress",
+            serde_json::json!({ "stage": "scanning", "current": 0, "total": total }),
+        );
+
+        let step = (total / 100).max(1);
+        let photos = scanner::scan_entries(&entries, |done| {
+            if done % step == 0 || done == total {
+                let _ = app_for_scan.emit(
+                    "scan-progress",
+                    serde_json::json!({ "stage": "scanning", "current": done, "total": total }),
+                );
+            }
+        });
+
+        let count = storage::batch_insert_photos(&photos, album_id)?;
+        Ok((photos, count))
+    })
+    .await
+    .map_err(|e| format!("Import task panicked: {}", e))??;
+
+    // Brief "saving" phase is already done; signal completion stages.
+    let total = photos.len();
+    let _ = app.emit(
+        "scan-progress",
+        serde_json::json!({ "stage": "saving", "current": total, "total": total }),
+    );
+
+    let _ = app.emit(
+        "scan-complete",
+        serde_json::json!({ "album_id": album_id, "total": count }),
+    );
+
+    // Return photos with album_id set (keeps the command contract intact for callers
+    // that still await the result directly).
     let photos_with_album: Vec<Photo> = photos
-        .iter()
-        .map(|p| {
-            let mut p = p.clone();
-            p.album_id = album.id;
+        .into_iter()
+        .map(|mut p| {
+            p.album_id = Some(album_id);
             p
         })
         .collect();
 
     Ok(ScanResult {
-        album_id: album.id.unwrap(),
+        album_id,
         total: count,
         photos: photos_with_album,
     })
 }
 
-/// Get thumbnail for a photo.
+/// Get thumbnail for a photo. Runs off the main thread so image decoding never
+/// blocks the UI (this matters for slow formats like HEIC).
 #[tauri::command]
-pub fn get_thumbnail(path: String, size: u32) -> Result<String, String> {
-    image_proc::get_thumbnail(&path, size)
+pub async fn get_thumbnail(path: String, size: u32) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || image_proc::get_thumbnail(&path, size))
+        .await
+        .map_err(|e| format!("Thumbnail task panicked: {}", e))?
 }
 
 /// Batch get thumbnails for multiple photos (parallel via rayon).
-/// Returns a list of (path, data_url) pairs for successful ones.
+/// Runs off the main thread so generating hundreds/thousands of thumbnails at once
+/// (e.g. right after importing a large album) never triggers the OS wait cursor.
 #[tauri::command]
-pub fn batch_get_thumbnails(paths: Vec<String>, size: u32) -> Result<Vec<(String, String)>, String> {
+pub async fn batch_get_thumbnails(
+    paths: Vec<String>,
+    size: u32,
+) -> Result<Vec<(String, String)>, String> {
     let count = paths.len();
-    let t = Instant::now();
-    let result = image_proc::batch_get_thumbnails(&paths, size);
-    let elapsed = t.elapsed();
-    eprintln!(
-        "[perf] batch_get_thumbnails: {:?} ({} images, {} results)",
-        elapsed,
-        count,
-        result.len()
-    );
+    let result = tokio::task::spawn_blocking(move || {
+        let t = Instant::now();
+        let result = image_proc::batch_get_thumbnails(&paths, size);
+        let elapsed = t.elapsed();
+        eprintln!(
+            "[perf] batch_get_thumbnails: {:?} ({} images, {} results)",
+            elapsed,
+            count,
+            result.len()
+        );
+        result
+    })
+    .await
+    .map_err(|e| format!("Batch thumbnail task panicked: {}", e))?;
     Ok(result)
 }
 
@@ -94,15 +150,20 @@ pub fn get_preview_image(path: String, max_width: u32) -> Result<String, String>
 
 /// List photos with filtering.
 #[tauri::command]
-pub fn list_photos(filter: PhotoFilter) -> Result<Vec<Photo>, String> {
-    let t = Instant::now();
-    let result = storage::list_photos(&filter);
-    let elapsed = t.elapsed();
-    eprintln!(
-        "[perf] list_photos: {:?} ({} rows)",
-        elapsed,
-        result.as_ref().map(|v| v.len()).unwrap_or(0)
-    );
+pub async fn list_photos(filter: PhotoFilter) -> Result<Vec<Photo>, String> {
+    let result = tokio::task::spawn_blocking(move || {
+        let t = Instant::now();
+        let result = storage::list_photos(&filter);
+        let elapsed = t.elapsed();
+        eprintln!(
+            "[perf] list_photos: {:?} ({} rows)",
+            elapsed,
+            result.as_ref().map(|v| v.len()).unwrap_or(0)
+        );
+        result
+    })
+    .await
+    .map_err(|e| format!("list_photos task panicked: {}", e))?;
     result
 }
 
@@ -341,8 +402,10 @@ pub fn export_selection(
 
 /// Get photo statistics for an album (or all photos if album_id is None).
 #[tauri::command]
-pub fn get_stats(album_id: Option<i64>) -> Result<storage::PhotoStats, String> {
-    storage::get_stats(album_id)
+pub async fn get_stats(album_id: Option<i64>) -> Result<storage::PhotoStats, String> {
+    tokio::task::spawn_blocking(move || storage::get_stats(album_id))
+        .await
+        .map_err(|e| format!("get_stats task panicked: {}", e))?
 }
 
 /// Delete an album and its photos. Optionally clear thumbnail cache.
@@ -401,63 +464,77 @@ pub fn get_nima_status() -> bool {
 /// Lets already-imported albums pick up the newly-added camera fields
 /// (make/model/lens/aperture/shutter/iso/focal length/exposure bias).
 #[tauri::command]
-pub fn rescan_album_metadata(album_id: i64) -> usize {
-    let filter = PhotoFilter {
-        album_id: Some(album_id),
-        ..Default::default()
-    };
-    let photos = storage::list_photos(&filter).unwrap_or_default();
-    let mut updated = 0usize;
-    for p in &photos {
-        let (
-            _taken_at,
-            _width,
-            _height,
-            _lat,
-            _lon,
-            camera_make,
-            camera_model,
-            lens,
-            aperture,
-            shutter_speed,
-            iso,
-            focal_length,
-            exposure_bias,
-        ) = scanner::read_exif(Path::new(&p.path));
-        let _ = storage::update_camera_metadata(
-            &p.path,
-            camera_make,
-            camera_model,
-            lens,
-            aperture,
-            shutter_speed,
-            iso,
-            focal_length,
-            exposure_bias,
-        );
-        updated += 1;
-    }
-    updated
+pub async fn rescan_album_metadata(album_id: i64) -> usize {
+    // Reads EXIF for every photo in the album — heavy I/O. Run off the main
+    // thread so the UI stays responsive (no macOS spinner) on large albums.
+    tokio::task::spawn_blocking(move || {
+        let filter = PhotoFilter {
+            album_id: Some(album_id),
+            ..Default::default()
+        };
+        let photos = storage::list_photos(&filter).unwrap_or_default();
+        let mut updated = 0usize;
+        for p in &photos {
+            let (
+                _taken_at,
+                _width,
+                _height,
+                _lat,
+                _lon,
+                camera_make,
+                camera_model,
+                lens,
+                aperture,
+                shutter_speed,
+                iso,
+                focal_length,
+                exposure_bias,
+            ) = scanner::read_exif(Path::new(&p.path));
+            let _ = storage::update_camera_metadata(
+                &p.path,
+                camera_make,
+                camera_model,
+                lens,
+                aperture,
+                shutter_speed,
+                iso,
+                focal_length,
+                exposure_bias,
+            );
+            updated += 1;
+        }
+        updated
+    })
+    .await
+    .unwrap_or(0)
 }
 
 /// Build the year → month → day time tree for an album.
 #[tauri::command]
-pub fn get_time_tree(album_id: i64) -> Vec<TimeNode> {
-    crate::grouping::build_time_tree(album_id)
+pub async fn get_time_tree(album_id: i64) -> Vec<TimeNode> {
+    // Runs off the main thread: queries the DB and builds the tree.
+    tokio::task::spawn_blocking(move || crate::grouping::build_time_tree(album_id))
+        .await
+        .unwrap_or_default()
 }
 
 /// Cluster an album's photos by GPS location (offline proximity clustering).
 #[tauri::command]
-pub fn get_location_groups(album_id: i64) -> Vec<LocationGroup> {
-    crate::grouping::build_location_groups(album_id)
+pub async fn get_location_groups(album_id: i64) -> Vec<LocationGroup> {
+    tokio::task::spawn_blocking(move || crate::grouping::build_location_groups(album_id))
+        .await
+        .unwrap_or_default()
 }
 
 /// Find near-duplicate / similar photo groups via perceptual hash.
 /// `threshold` is the max Hamming distance between hashes (default 10).
 #[tauri::command]
-pub fn get_similar_groups(album_id: i64, threshold: Option<u32>) -> Vec<PhotoGroup> {
+pub async fn get_similar_groups(album_id: i64, threshold: Option<u32>) -> Vec<PhotoGroup> {
     let threshold = threshold.unwrap_or(10).clamp(1, 32);
-    crate::grouping::build_similar_groups(album_id, threshold)
+    // Perceptual-hash computation decodes images, so keep it off the main thread.
+    tokio::task::spawn_blocking(move || crate::grouping::build_similar_groups(album_id, threshold))
+        .await
+        .unwrap_or_default()
 }
 
 // We need rayon's parallel iterator

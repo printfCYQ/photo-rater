@@ -175,6 +175,16 @@ export function onScanComplete(
   });
 }
 
+/// Import progress events emitted by the async `scan_directory` command.
+/// `stage` is one of "scanning" | "saving" | "done".
+export function onScanProgress(
+  callback: (payload: { stage: string; current: number; total: number }) => void
+): Promise<UnlistenFn> {
+  return listen("scan-progress", (event) => {
+    callback(event.payload as { stage: string; current: number; total: number });
+  });
+}
+
 export function onBatchScoreProgress(
   callback: (payload: { current: number; total: number }) => void
 ): Promise<UnlistenFn> {

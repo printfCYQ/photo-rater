@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type {
   Album,
   LocationGroup,
@@ -35,6 +35,68 @@ interface SidebarProps {
   selectedGroupId: number | null;
 }
 
+interface AlbumRowProps {
+  album: Album;
+  selected: boolean;
+  hovered: boolean;
+  onSelectAlbum: (id: number) => void;
+  onDeleteAlbum: (id: number, name: string) => void;
+}
+
+// One album entry in the sidebar.
+// The delete button's visibility is driven by the `hovered` prop, which the
+// parent computes from a document-level `mousemove` listener (see Sidebar).
+// This avoids relying on CSS `:hover` / `mouseleave`, which WKWebView can drop
+// on fast pointer movement and leave the button stuck visible. `pointer-events-none`
+// when hidden guarantees the invisible button never intercepts row clicks.
+function AlbumRow({ album, selected, hovered, onSelectAlbum, onDeleteAlbum }: AlbumRowProps) {
+  return (
+    <div
+      data-album-row={album.id ?? undefined}
+      className={`group flex items-center py-2 px-2.5 rounded-md cursor-pointer transition-all duration-150
+        border border-transparent relative
+        ${selected
+          ? "bg-accent/8 border-accent/30"
+          : "hover:bg-surface-alt"
+        }`}
+      onClick={() => onSelectAlbum(album.id!)}
+    >
+      {selected && (
+        <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-[3px] bg-accent" />
+      )}
+      <div className={`w-8 h-8 rounded-sm flex items-center justify-center flex-shrink-0 mr-2.5 transition-colors duration-150
+        ${selected
+          ? "bg-accent/10 text-accent"
+          : hovered
+            ? "bg-surface-raised text-base-400"
+            : "bg-surface-raised text-base-500"
+        }`}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-px">
+        <span className="text-[13px] font-medium text-base-100 truncate">{album.name}</span>
+        <span className="text-2xs text-base-500">{album.photo_count} 张照片</span>
+      </div>
+      <button
+        className={`w-6 h-6 rounded-sm flex items-center justify-center text-base-500 hover:text-reject hover:bg-reject/10 transition-all duration-150 flex-shrink-0 ml-1
+          ${hovered ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onDeleteAlbum(album.id!, album.name);
+        }}
+        title="删除相册"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 export function Sidebar({
   albums,
   selectedAlbumId,
@@ -60,6 +122,25 @@ export function Sidebar({
   computingSimilar,
   selectedGroupId,
 }: SidebarProps) {
+  // Tracks which album row the pointer is currently over. Driven by a
+  // document-level `mousemove` listener (not :hover / mouseleave) so the
+  // delete button reliably hides even when the pointer moves quickly across
+  // element boundaries — WKWebView can drop hover-leave updates on fast moves.
+  const [hoveredAlbumId, setHoveredAlbumId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      const row = target?.closest<HTMLElement>("[data-album-row]");
+      const raw = row?.dataset.albumRow;
+      const id = raw != null && raw !== "" ? Number(raw) : null;
+      const next = id != null && !Number.isNaN(id) ? id : null;
+      setHoveredAlbumId((prev) => (prev === next ? prev : next));
+    };
+    document.addEventListener("mousemove", onMove);
+    return () => document.removeEventListener("mousemove", onMove);
+  }, []);
+
   return (
     <aside
       className={`bg-surface flex flex-col flex-shrink-0 border-r border-base-800/60 relative z-10 overflow-hidden
@@ -117,46 +198,14 @@ export function Sidebar({
               <p className="text-xs text-base-500 py-2 px-1.5">暂无相册，点击上方按钮导入</p>
             ) : (
               albums.map((album) => (
-                <div
+                <AlbumRow
                   key={album.id}
-                  className={`group flex items-center py-2 px-2.5 rounded-md cursor-pointer transition-all duration-150
-                    border border-transparent relative
-                    ${selectedAlbumId === album.id && browseMode === "album"
-                      ? "bg-accent/8 border-accent/30"
-                      : "hover:bg-surface-alt"
-                    }`}
-                  onClick={() => onSelectAlbum(album.id!)}
-                >
-                  {selectedAlbumId === album.id && browseMode === "album" && (
-                    <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-[3px] bg-accent" />
-                  )}
-                  <div className={`w-8 h-8 rounded-sm flex items-center justify-center flex-shrink-0 mr-2.5 transition-colors duration-150
-                    ${selectedAlbumId === album.id && browseMode === "album"
-                      ? "bg-accent/10 text-accent"
-                      : "bg-surface-raised text-base-500 group-hover:text-base-400"
-                    }`}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0 flex flex-col gap-px">
-                    <span className="text-[13px] font-medium text-base-100 truncate">{album.name}</span>
-                    <span className="text-2xs text-base-500">{album.photo_count} 张照片</span>
-                  </div>
-                  <button
-                    className="w-6 h-6 rounded-sm flex items-center justify-center opacity-0 group-hover:opacity-100 text-base-500 hover:text-reject hover:bg-reject/10 transition-all duration-150 flex-shrink-0 ml-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteAlbum(album.id!, album.name);
-                    }}
-                    title="删除相册"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                </div>
+                  album={album}
+                  selected={selectedAlbumId === album.id && browseMode === "album"}
+                  hovered={hoveredAlbumId === album.id}
+                  onSelectAlbum={onSelectAlbum}
+                  onDeleteAlbum={onDeleteAlbum}
+                />
               ))
             )}
           </div>

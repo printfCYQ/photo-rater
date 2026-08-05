@@ -50,46 +50,67 @@ function PhotoGridInner({
     return () => window.removeEventListener("resize", onResize);
   }, [sidebarWidth]);
 
-  // Batch-generate all thumbnails in a single parallel IPC call,
-  // so cells never need to fire individual getThumbnailUrl calls.
-  useEffect(() => {
-    if (photos.length === 0) return;
+  // Lazy thumbnail loading: only generate thumbnails for the visible range
+  // (+ a buffer), driven by Virtuoso's onRangeChanged. This keeps the grid
+  // responsive on large albums instead of batch-decoding every photo at once.
+  const rangeRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  const loadTimer = useRef<number | null>(null);
 
-    const uncachedPaths: string[] = [];
-    for (const p of photos) {
-      if (!thumbUrlCache.has(p.path)) {
-        uncachedPaths.push(p.path);
+  const requestRangeThumbs = useCallback(
+    (start: number, end: number) => {
+      if (photos.length === 0) return;
+      const buffer = 24;
+      const s = Math.max(0, start - buffer);
+      const e = Math.min(photos.length - 1, end + buffer);
+      const paths: string[] = [];
+      for (let i = s; i <= e; i++) {
+        const p = photos[i];
+        if (p && !thumbUrlCache.has(p.path)) paths.push(p.path);
       }
-    }
+      if (paths.length === 0) {
+        console.log(`[perf] rangeThumbs: range ${s}-${e} already cached`);
+        return;
+      }
+      const label = `[perf] rangeThumbs IPC (${paths.length} imgs, range ${s}-${e}, size=${thumbSize})`;
+      console.time(label);
+      batchGetThumbnailUrls(paths, thumbSize)
+        .then((urlMap) => {
+          console.timeEnd(label);
+          console.log(`[perf] rangeThumbs returned ${urlMap.size} URLs`);
+          for (const [path, url] of urlMap) {
+            thumbUrlCache.set(path, url);
+          }
+          setBatchVersion((v) => v + 1);
+        })
+        .catch((err) => {
+          console.timeEnd(label);
+          console.error("[perf] rangeThumbs failed:", err);
+        });
+    },
+    [photos, thumbSize]
+  );
 
-    if (uncachedPaths.length === 0) {
-      console.log(`[perf] batchThumbs: all ${photos.length} thumbnails cached, skipping IPC`);
-      return;
-    }
+  const handleRangeChanged = useCallback(
+    (range: { startIndex: number; endIndex: number }) => {
+      rangeRef.current = { start: range.startIndex, end: range.endIndex };
+      if (loadTimer.current !== null) window.clearTimeout(loadTimer.current);
+      // Debounce rapid scroll events into a single batch request.
+      loadTimer.current = window.setTimeout(() => {
+        requestRangeThumbs(range.startIndex, range.endIndex);
+      }, 60);
+    },
+    [requestRangeThumbs]
+  );
 
-    let cancelled = false;
-    const label = `[perf] batchThumbs IPC (${uncachedPaths.length} images, size=${thumbSize})`;
-    console.time(label);
-
-    batchGetThumbnailUrls(uncachedPaths, thumbSize)
-      .then((urlMap) => {
-        if (cancelled) return;
-        console.timeEnd(label);
-        console.log(`[perf] batchThumbs returned ${urlMap.size} URLs`);
-        for (const [path, url] of urlMap) {
-          thumbUrlCache.set(path, url);
-        }
-        setBatchVersion((v) => v + 1);
-      })
-      .catch((e) => {
-        console.timeEnd(label);
-        console.error("[perf] batchThumbs failed:", e);
-      });
-
+  // Initial load for the current album, and reload when the album or
+  // thumbnail size changes. Virtuoso also fires onRangeChanged on mount,
+  // which refines the window further.
+  useEffect(() => {
+    requestRangeThumbs(rangeRef.current.start, rangeRef.current.end);
     return () => {
-      cancelled = true;
+      if (loadTimer.current !== null) window.clearTimeout(loadTimer.current);
     };
-  }, [photos, thumbSize]);
+  }, [photos, thumbSize, requestRangeThumbs]);
 
   // Grid components — use fixed column count so Virtuoso can predict row count.
   // Recreated only when columns changes (user resizes window).
@@ -269,6 +290,7 @@ function PhotoGridInner({
           components={gridComponents}
           computeItemKey={computeItemKey}
           overscan={300}
+          rangeChanged={handleRangeChanged}
         />
     </div>
   );
@@ -335,7 +357,7 @@ const VirtualPhotoCell = memo(function VirtualPhotoCell({
       {/* Thumbnail */}
       <div className="w-full h-full bg-base flex items-center justify-center overflow-hidden relative">
         {!loaded && (
-          <div className="absolute inset-0 bg-gradient-to-br from-surface-overlay to-surface-alt animate-pulse-soft" />
+          <div className="skeleton-shimmer" />
         )}
         {thumb && (
           <img

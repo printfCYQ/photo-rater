@@ -1,28 +1,33 @@
 use crate::models::{is_image_file, Photo};
 use rayon::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 use walkdir::WalkDir;
 
-/// Scan a directory recursively for image files.
-/// Uses rayon for parallel EXIF reading.
-/// Returns a list of Photo records (without scores).
-pub fn scan_directory(dir: &str) -> Vec<Photo> {
+/// Recursively collect all image file paths under `dir` (no decoding/EXIF read).
+/// This is the cheap I/O walk that lets callers know the total count up front.
+pub fn collect_image_paths(dir: &str) -> Vec<PathBuf> {
     let path = Path::new(dir);
-    let now = chrono::Utc::now().timestamp();
-
-    // Collect all image file paths first
-    let entries: Vec<_> = WalkDir::new(path)
+    WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter(|e| is_image_file(e.path()))
-        .collect();
+        .map(|e| e.path().to_path_buf())
+        .collect()
+}
 
-    // Process in parallel: read metadata + EXIF for all files at once
+/// Read metadata + EXIF for each entry in parallel, building Photo records.
+/// Calls `on_progress` with the number of files processed so far (1..=total)
+/// so the caller can report import progress. The count is monotonic but not
+/// necessarily aligned with entry order (parallel workers).
+pub fn scan_entries(entries: &[PathBuf], on_progress: impl Fn(usize) + Sync) -> Vec<Photo> {
+    let now = chrono::Utc::now().timestamp();
+    let counter = std::sync::atomic::AtomicUsize::new(0);
+
     entries
         .par_iter()
-        .map(|entry| {
-            let file_path = entry.path();
+        .map(|file_path| {
             let absolute_path = file_path.to_string_lossy().to_string();
             let file_name = file_path
                 .file_name()
@@ -34,8 +39,7 @@ pub fn scan_directory(dir: &str) -> Vec<Photo> {
                 .and_then(|p| p.to_str())
                 .unwrap_or("")
                 .to_string();
-            let file_size = entry
-                .metadata()
+            let file_size = std::fs::metadata(file_path)
                 .map(|m| m.len() as i64)
                 .unwrap_or(0);
 
@@ -56,7 +60,7 @@ pub fn scan_directory(dir: &str) -> Vec<Photo> {
                 exposure_bias,
             ) = read_exif(file_path);
 
-            Photo {
+            let photo = Photo {
                 id: None,
                 path: absolute_path,
                 file_name,
@@ -91,7 +95,11 @@ pub fn scan_directory(dir: &str) -> Vec<Photo> {
                 rated_at: None,
                 created_at: now,
                 album_id: None,
-            }
+            };
+
+            let done = counter.fetch_add(1, Ordering::Relaxed) + 1;
+            on_progress(done);
+            photo
         })
         .collect()
 }
