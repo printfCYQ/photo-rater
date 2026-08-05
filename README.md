@@ -4,10 +4,15 @@
 
 ![Photo Rater 截图](./public/screenshoot.png)
 
+> 当前版本：**v0.2.0** — [GitHub Releases 下载](https://github.com/printfCYQ/photo-rater/releases/latest)
 
 ## 核心功能
 
 - **文件夹导入** — 选择本地文件夹，递归扫描 jpg/png/webp/bmp/tiff 等格式，按文件夹创建相册管理
+- **iPhone / HEIC 支持** — iOS 照片（HEIC/HEIF）可正常生成缩略图与大图，不再空白
+- **相似 / 连拍去重** — 自动把相似的连拍、重复照片聚成一组，每组按评分排序，方便挑出最好的一张
+- **时间 / 地点分组** — 侧边栏可按 年/月/日 浏览；带定位的照片可按拍摄地点筛选（无 GPS 归入「未知地点」）
+- **后台导入** — 大相册改为后台扫描，状态栏实时显示进度，导入过程中仍可浏览其它相册
 - **自动评分** — NIMA AI 美学模型 (ONNX) + 六维启发式分析（清晰度、色彩、构图、曝光、频域、噪点），混合加权得出 0-10 综合分
 - **人工筛选** — 1-5 星评分 + 保留/淘汰标记，键盘快捷键全流程操作
 - **筛选排序** — 按综合分/AI分/清晰度/评分排序，按状态和最低分阈值过滤
@@ -74,10 +79,11 @@ photo-rater/
 ├── src-tauri/              # Rust 后端
 │   ├── src/
 │   │   ├── lib.rs          # 应用入口，模块注册，NIMA 初始化
-│   │   ├── commands.rs     # Tauri commands (16 个命令)
+│   │   ├── commands.rs     # Tauri commands（扫描/评分/分组/导出等）
 │   │   ├── scanner.rs      # 文件扫描 (walkdir + EXIF)
-│   │   ├── image_proc.rs   # 图片处理 (缩略图缓存 + 启发式信号)
+│   │   ├── image_proc.rs   # 图片处理 (缩略图缓存 + 启发式信号 + HEIC)
 │   │   ├── scoring.rs      # 评分引擎 (综合分计算 + 权重管理)
+│   │   ├── grouping.rs     # 时间/地点/相似分组
 │   │   ├── nima.rs         # NIMA ONNX 推理
 │   │   ├── storage.rs      # SQLite 存储层
 │   │   └── models.rs       # 数据模型
@@ -130,11 +136,15 @@ pnpm tauri:build
 
 ## 下载与安装
 
-从 GitHub Releases 下载对应平台安装包：
+最新版本：**v0.2.0** — [GitHub Releases](https://github.com/printfCYQ/photo-rater/releases/latest)
 
-- **macOS**：`PhotoRater-macos-vX.Y.Z.zip` → 解压得到 `Photo Rater.app`
-- **Windows**：`Photo.Rater_X.Y.Z_x64-setup.exe`（或 `.msi`）
+从 Releases 下载对应平台安装包：
+
+- **macOS (Apple Silicon)**：`Photo.Rater_X.Y.Z_macos_aarch64.zip` → 解压得到 `Photo Rater.app`
+- **Windows**：`Photo.Rater_X.Y.Z_x64-setup.exe`（或 `_x64_en-US.msi`）
 - **Linux**：`.AppImage` / `.deb`（如已构建）
+
+> Windows / Linux 安装包由 **GitHub Actions 在打 tag 时自动构建上传**；macOS 安装包需在**本地 Mac 上构建后手动上传**（GitHub 的 Linux 构建机无法产出 macOS 包），因此 macOS 包文件名带 `_macos_aarch64` 以标明平台与架构。
 
 ### macOS 打开方法
 
@@ -178,6 +188,7 @@ pnpm dev
 | `scan_directory` | 扫描文件夹，创建相册，返回照片列表 |
 | `list_albums` / `delete_album` | 相册管理 |
 | `list_photos` | 按筛选条件查询照片（状态/分数/排序） |
+| `get_time_tree` / `get_location_groups` / `get_similar_groups` | 时间树 / 地点分组 / 相似（连拍）分组 |
 | `get_thumbnail` / `batch_get_thumbnails` | 缩略图生成（磁盘缓存 + Asset Protocol） |
 | `get_preview_image` | 大图预览（按需缩放） |
 | `score_photo_ai` / `batch_score_ai` | 单张/批量评分（AI + 启发式） |
